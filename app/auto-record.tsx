@@ -11,11 +11,20 @@ import {
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Bell, Smartphone, CreditCard, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, Linking } from 'react-native';
 import { colors } from '../constants/theme';
-import { NotificationService, NotificationData } from '../modules/NotificationModule';
 import { parseNotification, ParsedTransaction } from '../services/notificationParser';
 import { useExpenseStore } from '../store/useExpenseStore';
+
+// 动态导入 react-native-notification-listener
+let RNNotificationListener: any = null;
+if (Platform.OS === 'android') {
+  try {
+    RNNotificationListener = require('react-native-notification-listener');
+  } catch (e) {
+    console.warn('react-native-notification-listener not available');
+  }
+}
 
 const AUTO_RECORD_KEY = 'auto_record_enabled';
 
@@ -26,14 +35,20 @@ export default function AutoRecordSettings() {
   const [hasPermission, setHasPermission] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [recentTransactions, setRecentTransactions] = useState<ParsedTransaction[]>([]);
+  const [headlessListener, setHeadlessListener] = useState<any>(null);
 
-  const isSupported = Platform.OS === 'android';
+  const isSupported = Platform.OS === 'android' && RNNotificationListener !== null;
 
   // 检查权限状态
   const checkPermission = useCallback(async () => {
     if (!isSupported) return;
-    const enabled = await NotificationService.isEnabled();
-    setHasPermission(enabled);
+    try {
+      const enabled = await RNNotificationListener.isPermissionGranted();
+      setHasPermission(enabled);
+    } catch (error) {
+      console.error('Failed to check permission:', error);
+      setHasPermission(false);
+    }
   }, [isSupported]);
 
   useEffect(() => {
@@ -53,14 +68,36 @@ export default function AutoRecordSettings() {
 
   // 设置通知监听
   useEffect(() => {
-    if (!isSupported || !hasPermission || !autoRecord) return;
+    if (!isSupported || !hasPermission || !autoRecord) {
+      // 如果关闭自动记录，停止监听
+      if (headlessListener) {
+        headlessListener.remove();
+        setHeadlessListener(null);
+      }
+      return;
+    }
 
     console.log('Setting up notification listener...');
     
-    const subscription = NotificationService.addNotificationListener((data: NotificationData) => {
-      console.log('Received notification:', data);
+    // 启动通知监听
+    RNNotificationListener.startListenerService();
+    
+    // 添加通知监听回调
+    const subscription = RNNotificationListener.addListener((notification: any) => {
+      console.log('Received notification:', notification);
+      
+      // 只处理微信和支付宝的通知
+      if (notification.app !== 'com.tencent.mm' && notification.app !== 'com.eg.android.AlipayGphone') {
+        return;
+      }
       
       // 解析通知
+      const data = {
+        packageName: notification.app,
+        title: notification.title || '',
+        text: notification.text || '',
+      };
+      
       const transaction = parseNotification(data);
       
       if (transaction) {
@@ -80,8 +117,11 @@ export default function AutoRecordSettings() {
       }
     });
 
+    setHeadlessListener(subscription);
+
     return () => {
-      NotificationService.removeNotificationListener(subscription);
+      subscription.remove();
+      RNNotificationListener.stopListenerService();
     };
   }, [isSupported, hasPermission, autoRecord, addExpense]);
 
@@ -107,7 +147,12 @@ export default function AutoRecordSettings() {
 
   // 打开通知监听设置页面
   const openNotificationSettings = () => {
-    NotificationService.openSettings();
+    if (RNNotificationListener) {
+      RNNotificationListener.requestPermission();
+    } else {
+      // 备用方案：打开系统设置
+      Linking.openSettings();
+    }
   };
 
   if (!isReady) {
@@ -179,7 +224,7 @@ export default function AutoRecordSettings() {
             <>
               <Box bg={colors.background} rounded="2xl" p={4} mb={4}>
                 <Text color={colors.textSecondary} fontSize="sm" lineHeight={20}>
-                  由于 Android 系统限制，通知监听权限需要在系统设置中手动开启。点击下方按钮跳转到设置页面。
+                  由于 Android 系统限制，通知监听权限需要在系统设置中手动开启。点击下方按钮申请权限。
                 </Text>
               </Box>
 
@@ -194,7 +239,7 @@ export default function AutoRecordSettings() {
                 >
                   <ExternalLink size={20} color={colors.white} />
                   <Text color={colors.white} fontWeight="500" ml={2}>
-                    前往系统设置开启
+                    申请通知权限
                   </Text>
                 </Box>
               </Pressable>
@@ -320,7 +365,7 @@ export default function AutoRecordSettings() {
                 <Text color={colors.white} fontSize="xs" fontWeight="600">1</Text>
               </Box>
               <Text color={colors.textSecondary} fontSize="sm" flex={1}>
-                点击"前往系统设置开启"按钮
+                点击"申请通知权限"按钮
               </Text>
             </HStack>
             <HStack space={3} alignItems="flex-start">
@@ -328,7 +373,7 @@ export default function AutoRecordSettings() {
                 <Text color={colors.white} fontSize="xs" fontWeight="600">2</Text>
               </Box>
               <Text color={colors.textSecondary} fontSize="sm" flex={1}>
-                在设置中找到"通知使用权"或"通知访问权限"
+                在系统设置中允许 EasyBill 访问通知
               </Text>
             </HStack>
             <HStack space={3} alignItems="flex-start">
@@ -336,7 +381,7 @@ export default function AutoRecordSettings() {
                 <Text color={colors.white} fontSize="xs" fontWeight="600">3</Text>
               </Box>
               <Text color={colors.textSecondary} fontSize="sm" flex={1}>
-                找到 EasyBill 并开启权限
+                返回应用，开启"自动记录交易"开关
               </Text>
             </HStack>
             <HStack space={3} alignItems="flex-start">
@@ -344,7 +389,7 @@ export default function AutoRecordSettings() {
                 <Text color={colors.white} fontSize="xs" fontWeight="600">4</Text>
               </Box>
               <Text color={colors.textSecondary} fontSize="sm" flex={1}>
-                返回应用，开启"自动记录交易"开关
+                使用微信/支付宝进行交易，自动识别记账
               </Text>
             </HStack>
           </VStack>

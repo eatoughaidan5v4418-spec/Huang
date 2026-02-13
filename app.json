@@ -30,8 +30,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router",
-      "./plugins/withNotificationListener"
+      "expo-router"
     ],
     "extra": {
       "eas": {
