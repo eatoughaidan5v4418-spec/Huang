@@ -1,10 +1,16 @@
 import React from 'react';
+import { NativeBaseProvider } from 'native-base';
 import { Stack } from 'expo-router';
+import { theme } from '../constants/theme';
 
 export default function RootLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
+    <NativeBaseProvider theme={theme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="add-expense" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="auto-record" options={{ presentation: 'modal' }} />
+      </Stack>
+    </NativeBaseProvider>
   );
 }
