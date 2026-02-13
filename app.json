@@ -4,7 +4,14 @@
     "slug": "easybill",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "easybill",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -13,8 +20,18 @@
       "bundleIdentifier": "com.easybill.app"
     },
     "android": {
-      "package": "com.easybill.app"
+      "package": "com.easybill.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
     "extra": {
       "eas": {
         "projectId": "fe637980-b639-4d72-b8c8-5790dd4d27d3"
