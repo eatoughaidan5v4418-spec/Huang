@@ -1,0 +1,39 @@
+# System directories
+AppData/
+Windows/
+Program Files/
+Program Files (x86)/
+$RECYCLE.BIN/
+System Volume Information/
+
+# Project specific
+node_modules/
+.git/
+dist/
+dist2/
+web/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+*.apk
+*.aab
+*.ipa

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EasyBill - Debug</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 20px; }
+      #root { min-height: 400px; border: 1px dashed #ccc; padding: 20px; }
+      .error { color: red; background: #ffe6e6; padding: 10px; margin: 10px 0; border-radius: 4px; }
+      .success { color: green; background: #e6ffe6; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>EasyBill Debug Test</h1>
+    <div id="status"></div>
+    <div id="root"></div>
+    
+    <script type="module">
+      const status = document.getElementById('status');
+      
+      try {
+        status.innerHTML = '<div class="success">Module loading started...</div>';
+        
+        import('./_expo/static/js/web/AppEntry-24235983cea91d82da1ff6a7e0d8d8f6.js')
+          .then(() => {
+            status.innerHTML += '<div class="success">Script loaded successfully!</div>';
+          })
+          .catch((error) => {
+            status.innerHTML += '<div class="error">Load error: ' + error.message + '</div>';
+            console.error('Load error:', error);
+          });
+      } catch (error) {
+        status.innerHTML += '<div class="error">Error: ' + error.message + '</div>';
+        console.error('Error:', error);
+      }
+    </script>
+  </body>
+</html>
