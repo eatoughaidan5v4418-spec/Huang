@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Text,
@@ -9,32 +9,87 @@ import {
   Switch,
 } from 'native-base';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Smartphone, CreditCard, AlertCircle, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, Bell, Smartphone, CreditCard, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { colors } from '../constants/theme';
+import { NotificationService, NotificationData } from '../modules/NotificationModule';
+import { parseNotification, ParsedTransaction } from '../services/notificationParser';
+import { useExpenseStore } from '../store/useExpenseStore';
 
 const AUTO_RECORD_KEY = 'auto_record_enabled';
-const NOTIFICATION_PERMISSION_KEY = 'notification_permission_enabled';
 
 export default function AutoRecordSettings() {
   const router = useRouter();
+  const addExpense = useExpenseStore((state) => state.addExpense);
   const [autoRecord, setAutoRecord] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [recentTransactions, setRecentTransactions] = useState<ParsedTransaction[]>([]);
 
   const isSupported = Platform.OS === 'android';
 
+  // 检查权限状态
+  const checkPermission = useCallback(async () => {
+    if (!isSupported) return;
+    const enabled = await NotificationService.isEnabled();
+    setHasPermission(enabled);
+  }, [isSupported]);
+
   useEffect(() => {
     loadSettings();
-  }, []);
+    
+    // 监听应用状态变化，当用户从设置返回时重新检查权限
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkPermission();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [checkPermission]);
+
+  // 设置通知监听
+  useEffect(() => {
+    if (!isSupported || !hasPermission || !autoRecord) return;
+
+    console.log('Setting up notification listener...');
+    
+    const subscription = NotificationService.addNotificationListener((data: NotificationData) => {
+      console.log('Received notification:', data);
+      
+      // 解析通知
+      const transaction = parseNotification(data);
+      
+      if (transaction) {
+        console.log('Parsed transaction:', transaction);
+        
+        // 自动添加记账
+        addExpense({
+          amount: transaction.amount,
+          category: transaction.type === 'income' ? 'transfer' : 'shopping',
+          date: new Date(),
+          note: transaction.note || (transaction.type === 'income' ? '自动识别收入' : '自动识别支出'),
+          type: transaction.type,
+        });
+        
+        // 添加到最近交易列表
+        setRecentTransactions(prev => [transaction, ...prev].slice(0, 5));
+      }
+    });
+
+    return () => {
+      NotificationService.removeNotificationListener(subscription);
+    };
+  }, [isSupported, hasPermission, autoRecord, addExpense]);
 
   const loadSettings = async () => {
     try {
       const autoRecordValue = await AsyncStorage.getItem(AUTO_RECORD_KEY);
-      const permissionValue = await AsyncStorage.getItem(NOTIFICATION_PERMISSION_KEY);
+      await checkPermission();
       setAutoRecord(autoRecordValue === 'true');
-      setHasPermission(permissionValue === 'true');
       setIsReady(true);
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -43,17 +98,16 @@ export default function AutoRecordSettings() {
   };
 
   const toggleAutoRecord = async (enabled: boolean) => {
+    if (!hasPermission && enabled) {
+      return;
+    }
     setAutoRecord(enabled);
     await AsyncStorage.setItem(AUTO_RECORD_KEY, enabled.toString());
   };
 
-  const requestPermission = async () => {
-    try {
-      await AsyncStorage.setItem(NOTIFICATION_PERMISSION_KEY, 'true');
-      setHasPermission(true);
-    } catch (error) {
-      console.error('Failed to save permission:', error);
-    }
+  // 打开通知监听设置页面
+  const openNotificationSettings = () => {
+    NotificationService.openSettings();
   };
 
   if (!isReady) {
@@ -107,56 +161,56 @@ export default function AutoRecordSettings() {
         {/* 权限设置 */}
         <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
           <HStack alignItems="center" mb={4}>
-            <Box p={3} rounded="xl" bg={colors.primaryLight} mr={3}>
-              <Bell size={22} color={colors.primary} />
+            <Box p={3} rounded="xl" bg={hasPermission ? colors.incomeLight : colors.primaryLight} mr={3}>
+              <Bell size={22} color={hasPermission ? colors.income : colors.primary} />
             </Box>
             <VStack flex={1}>
               <Text color={colors.textPrimary} fontSize="md" fontWeight="500">
                 通知监听权限
               </Text>
               <Text color={colors.textSecondary} fontSize="sm">
-                需要开启权限才能自动抓取交易信息
+                {hasPermission ? '权限已开启' : '需要系统级权限才能监听通知'}
               </Text>
             </VStack>
+            {hasPermission && <CheckCircle size={24} color={colors.income} />}
           </HStack>
 
-          <Pressable onPress={requestPermission}>
-            <Box
-              bg={hasPermission ? colors.income : colors.primary}
-              rounded="full"
-              py={4}
-              alignItems="center"
-              flexDirection="row"
-              justifyContent="center"
-            >
-              {hasPermission ? (
-                <>
-                  <CheckCircle size={20} color={colors.white} />
+          {!hasPermission && (
+            <>
+              <Box bg={colors.background} rounded="2xl" p={4} mb={4}>
+                <Text color={colors.textSecondary} fontSize="sm" lineHeight={20}>
+                  由于 Android 系统限制，通知监听权限需要在系统设置中手动开启。点击下方按钮跳转到设置页面。
+                </Text>
+              </Box>
+
+              <Pressable onPress={openNotificationSettings}>
+                <Box
+                  bg={colors.primary}
+                  rounded="full"
+                  py={4}
+                  alignItems="center"
+                  flexDirection="row"
+                  justifyContent="center"
+                >
+                  <ExternalLink size={20} color={colors.white} />
                   <Text color={colors.white} fontWeight="500" ml={2}>
-                    权限已开启
+                    前往系统设置开启
                   </Text>
-                </>
-              ) : (
-                <>
-                  <Bell size={20} color={colors.white} />
-                  <Text color={colors.white} fontWeight="500" ml={2}>
-                    开启通知监听权限
-                  </Text>
-                </>
-              )}
-            </Box>
-          </Pressable>
+                </Box>
+              </Pressable>
+            </>
+          )}
         </Box>
 
         {/* 自动记录开关 */}
         <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
           <HStack justifyContent="space-between" alignItems="center">
-            <VStack>
+            <VStack flex={1} mr={4}>
               <Text color={colors.textPrimary} fontSize="md" fontWeight="500">
                 自动记录交易
               </Text>
               <Text color={colors.textSecondary} fontSize="sm" mt={1}>
-                检测到交易时自动添加记录
+                检测到微信/支付宝交易时自动添加记录
               </Text>
             </VStack>
             <Switch
@@ -167,7 +221,48 @@ export default function AutoRecordSettings() {
               size="lg"
             />
           </HStack>
+          
+          {!hasPermission && (
+            <Box mt={4} p={3} bg={colors.expenseLight} rounded="xl">
+              <Text color={colors.expense} fontSize="sm">
+                请先开启通知监听权限
+              </Text>
+            </Box>
+          )}
         </Box>
+
+        {/* 最近自动识别的交易 */}
+        {recentTransactions.length > 0 && (
+          <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
+            <Text color={colors.textPrimary} fontSize="md" fontWeight="500" mb={4}>
+              最近识别的交易
+            </Text>
+            <VStack space={3}>
+              {recentTransactions.map((transaction, index) => (
+                <Box key={index} bg={colors.background} rounded="2xl" p={4}>
+                  <HStack justifyContent="space-between" alignItems="center">
+                    <VStack>
+                      <Text color={colors.textPrimary} fontWeight="500">
+                        {transaction.note}
+                      </Text>
+                      <Text color={colors.textTertiary} fontSize="xs" numberOfLines={1} maxW={200}>
+                        {transaction.rawText.substring(0, 30)}...
+                      </Text>
+                    </VStack>
+                    <Text
+                      color={transaction.type === 'income' ? colors.income : colors.expense}
+                      fontWeight="600"
+                      fontSize="lg"
+                    >
+                      {transaction.type === 'income' ? '+' : '-'}
+                      ¥{transaction.amount.toFixed(2)}
+                    </Text>
+                  </HStack>
+                </Box>
+              ))}
+            </VStack>
+          </Box>
+        )}
 
         {/* 支持的应用 */}
         <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
@@ -185,7 +280,7 @@ export default function AutoRecordSettings() {
                   微信支付
                 </Text>
                 <Text color={colors.textSecondary} fontSize="sm">
-                  支持微信支付、微信转账
+                  支持收款、转账、红包等交易
                 </Text>
               </VStack>
               <CheckCircle size={20} color={colors.income} />
@@ -200,7 +295,7 @@ export default function AutoRecordSettings() {
                   支付宝
                 </Text>
                 <Text color={colors.textSecondary} fontSize="sm">
-                  支持支付宝支付、转账
+                  支持收款、转账、支付等交易
                 </Text>
               </VStack>
               <CheckCircle size={20} color={colors.income} />
@@ -215,23 +310,43 @@ export default function AutoRecordSettings() {
               <AlertCircle size={18} color={colors.primary} />
             </Box>
             <Text color={colors.textPrimary} fontSize="md" fontWeight="500">
-              使用说明
+              开启步骤
             </Text>
           </HStack>
 
           <VStack space={3}>
-            <Text color={colors.textSecondary} fontSize="sm">
-              1. 点击上方按钮开启通知监听权限
-            </Text>
-            <Text color={colors.textSecondary} fontSize="sm">
-              2. 在系统设置中找到 EasyBill 并开启
-            </Text>
-            <Text color={colors.textSecondary} fontSize="sm">
-              3. 返回应用，开启"自动记录交易"开关
-            </Text>
-            <Text color={colors.textSecondary} fontSize="sm">
-              4. 之后微信/支付宝的交易会自动记录
-            </Text>
+            <HStack space={3} alignItems="flex-start">
+              <Box w={6} h={6} rounded="full" bg={colors.primary} alignItems="center" justifyContent="center">
+                <Text color={colors.white} fontSize="xs" fontWeight="600">1</Text>
+              </Box>
+              <Text color={colors.textSecondary} fontSize="sm" flex={1}>
+                点击"前往系统设置开启"按钮
+              </Text>
+            </HStack>
+            <HStack space={3} alignItems="flex-start">
+              <Box w={6} h={6} rounded="full" bg={colors.primary} alignItems="center" justifyContent="center">
+                <Text color={colors.white} fontSize="xs" fontWeight="600">2</Text>
+              </Box>
+              <Text color={colors.textSecondary} fontSize="sm" flex={1}>
+                在设置中找到"通知使用权"或"通知访问权限"
+              </Text>
+            </HStack>
+            <HStack space={3} alignItems="flex-start">
+              <Box w={6} h={6} rounded="full" bg={colors.primary} alignItems="center" justifyContent="center">
+                <Text color={colors.white} fontSize="xs" fontWeight="600">3</Text>
+              </Box>
+              <Text color={colors.textSecondary} fontSize="sm" flex={1}>
+                找到 EasyBill 并开启权限
+              </Text>
+            </HStack>
+            <HStack space={3} alignItems="flex-start">
+              <Box w={6} h={6} rounded="full" bg={colors.primary} alignItems="center" justifyContent="center">
+                <Text color={colors.white} fontSize="xs" fontWeight="600">4</Text>
+              </Box>
+              <Text color={colors.textSecondary} fontSize="sm" flex={1}>
+                返回应用，开启"自动记录交易"开关
+              </Text>
+            </HStack>
           </VStack>
         </Box>
 
