@@ -2,24 +2,21 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Text,
-  Heading,
   VStack,
   HStack,
   Pressable,
-  useColorModeValue,
   ScrollView,
 } from 'native-base';
 import { useRouter } from 'expo-router';
 import {
   Plus,
   TrendingUp,
-  Calendar,
-  ChevronRight,
   Bell,
 } from 'lucide-react-native';
 import { useExpenseStore } from '../../store/useExpenseStore';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../constants/categories';
 import CategoryIcon from '../../components/ui/CategoryIcon';
+import { colors } from '../../constants/theme';
 
 export default function Index() {
   const router = useRouter();
@@ -53,11 +50,6 @@ export default function Index() {
     }
   }, [expenses, getMonthlyExpense, getMonthlyIncome, getRecentExpenses, currentYear, currentMonth]);
 
-  const bgColor = useColorModeValue('gray.50', 'gray.900');
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const textColor = useColorModeValue('gray.800', 'white');
-  const subTextColor = useColorModeValue('gray.500', 'gray.400');
-
   const getCategoryInfo = (categoryId: string, type: string) => {
     const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
     return categories.find((c) => c.id === categoryId) || categories[categories.length - 1];
@@ -86,76 +78,82 @@ export default function Index() {
 
   if (!isReady) {
     return (
-      <Box flex={1} bg={bgColor} justifyContent="center" alignItems="center">
-        <Text color={textColor}>加载中...</Text>
+      <Box flex={1} bg={colors.background} justifyContent="center" alignItems="center">
+        <Text color={colors.textSecondary}>加载中...</Text>
       </Box>
     );
   }
 
   return (
-    <Box flex={1} bg={bgColor} pt={12} px={4}>
-      <HStack justifyContent="space-between" alignItems="center" mb={6}>
-        <Heading size="xl" color={textColor}>
+    <Box flex={1} bg={colors.background} pt={16} px={6}>
+      {/* 头部标题 */}
+      <HStack justifyContent="space-between" alignItems="center" mb={8}>
+        <Text fontSize="3xl" fontWeight="600" color={colors.textPrimary}>
           EasyBill
-        </Heading>
-        <HStack space={2}>
+        </Text>
+        <HStack space={3}>
           <Pressable
             onPress={() => router.push('/auto-record')}
-            p={2}
+            p={3}
             rounded="full"
-            bg={cardBg}
-            shadow={2}
+            bg={colors.backgroundSecondary}
           >
-            <Bell size={22} color="#1890FF" />
+            <Bell size={22} color={colors.primary} />
           </Pressable>
           <Pressable
             onPress={() => router.push('/statistics')}
-            p={2}
+            p={3}
             rounded="full"
-            bg={cardBg}
-            shadow={2}
+            bg={colors.backgroundSecondary}
           >
-            <TrendingUp size={22} color="#1890FF" />
+            <TrendingUp size={22} color={colors.primary} />
           </Pressable>
         </HStack>
       </HStack>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Box bg={cardBg} rounded="2xl" p={6} shadow={3} mb={6}>
-          <HStack justifyContent="space-around" mb={4}>
-            <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
-                收入
+        {/* 月度总览卡片 */}
+        <Box
+          bg={colors.backgroundSecondary}
+          rounded="3xl"
+          p={8}
+          mb={8}
+        >
+          <HStack justifyContent="space-between" alignItems="flex-start">
+            <VStack alignItems="flex-start" flex={1}>
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
+                本月收入
               </Text>
-              <Text color="#52C41A" fontSize="xl" fontWeight="bold">
+              <Text color={colors.income} fontSize="2xl" fontWeight="600">
                 {formatCurrency(monthlyIncome)}
               </Text>
             </VStack>
             <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
-                支出
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
+                本月支出
               </Text>
-              <Text color="#FF6B6B" fontSize="xl" fontWeight="bold">
+              <Text color={colors.expense} fontSize="2xl" fontWeight="600">
                 {formatCurrency(monthlyExpense)}
               </Text>
             </VStack>
-            <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
+            <VStack alignItems="flex-end" flex={1}>
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
                 结余
               </Text>
               <Text
-                fontSize="xl"
-                fontWeight="bold"
-                color={monthlyIncome - monthlyExpense >= 0 ? '#52C41A' : '#FF6B6B'}
+                fontSize="2xl"
+                fontWeight="600"
+                color={monthlyIncome - monthlyExpense >= 0 ? colors.income : colors.expense}
               >
                 {formatCurrency(monthlyIncome - monthlyExpense)}
               </Text>
             </VStack>
           </HStack>
-          <HStack mt={2} space={1} alignItems="center" justifyContent="center">
-            <Calendar size={14} color={subTextColor} />
-            <Text color={subTextColor} fontSize="xs">
-              本月记账 {expenses.filter((e) => {
+
+          {/* 记账笔数 */}
+          <HStack mt={6} justifyContent="center">
+            <Text color={colors.textSecondary} fontSize="sm">
+              本月共记账 {expenses.filter((e) => {
                 const d = new Date(e.date);
                 return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
               }).length} 笔
@@ -163,98 +161,102 @@ export default function Index() {
           </HStack>
         </Box>
 
-        <Pressable onPress={() => router.push('/auto-record')} mb={4}>
+        {/* 自动记账提示 */}
+        <Pressable onPress={() => router.push('/auto-record')} mb={8}>
           <Box
-            bg="#E6F7FF"
-            rounded="xl"
-            p={4}
-            borderWidth={1}
-            borderColor="#91D5FF"
+            bg={colors.primaryLight}
+            rounded="3xl"
+            p={5}
           >
-            <HStack alignItems="center" justifyContent="space-between">
-              <HStack alignItems="center" space={3}>
-                <Box p={2} rounded="lg" bg="#1890FF20">
-                  <Bell size={20} color="#1890FF" />
-                </Box>
-                <VStack>
-                  <Text color="#1890FF" fontWeight="semibold">
-                    开启自动记账
-                  </Text>
-                  <Text color="#69C0FF" fontSize="xs">
-                    自动抓取微信/支付宝交易
-                  </Text>
-                </VStack>
-              </HStack>
-              <ChevronRight size={20} color="#1890FF" />
+            <HStack alignItems="center" space={4}>
+              <Box
+                p={3}
+                rounded="full"
+                bg={colors.white}
+              >
+                <Bell size={20} color={colors.primary} />
+              </Box>
+              <VStack flex={1}>
+                <Text color={colors.textPrimary} fontWeight="500" fontSize="md">
+                  开启自动记账
+                </Text>
+                <Text color={colors.textSecondary} fontSize="sm" mt={0.5}>
+                  自动抓取微信/支付宝交易
+                </Text>
+              </VStack>
             </HStack>
           </Box>
         </Pressable>
 
-        <HStack justifyContent="space-between" alignItems="center" mb={4}>
-          <Text color={textColor} fontSize="lg" fontWeight="semibold">
+        {/* 最近记录标题 */}
+        <HStack justifyContent="space-between" alignItems="center" mb={5}>
+          <Text color={colors.textPrimary} fontSize="lg" fontWeight="500">
             最近记录
           </Text>
           {recentExpenses.length > 0 && (
             <Pressable onPress={() => router.push('/statistics')}>
-              <HStack alignItems="center" space={1}>
-                <Text color="#1890FF" fontSize="sm">
-                  查看全部
-                </Text>
-                <ChevronRight size={14} color="#1890FF" />
-              </HStack>
+              <Text color={colors.primary} fontSize="sm">
+                查看全部
+              </Text>
             </Pressable>
           )}
         </HStack>
 
+        {/* 记录列表 */}
         {recentExpenses.length === 0 ? (
-          <Box bg={cardBg} rounded="xl" p={8} alignItems="center" shadow={2}>
-            <Text color={subTextColor} textAlign="center">
+          <Box
+            bg={colors.backgroundSecondary}
+            rounded="3xl"
+            p={10}
+            alignItems="center"
+            mb={8}
+          >
+            <Text color={colors.textSecondary} textAlign="center">
               还没有记账记录
             </Text>
-            <Text color={subTextColor} textAlign="center" fontSize="sm" mt={2}>
+            <Text color={colors.textTertiary} textAlign="center" fontSize="sm" mt={2}>
               点击下方按钮开始记账吧
             </Text>
           </Box>
         ) : (
-          <VStack space={3} pb={20}>
+          <VStack space={4} mb={24}>
             {recentExpenses.map((expense) => {
               const category = getCategoryInfo(expense.category, expense.type || 'expense');
               const isIncome = expense.type === 'income';
               return (
                 <Box
                   key={expense.id}
-                  bg={cardBg}
-                  rounded="xl"
-                  p={4}
-                  shadow={1}
+                  bg={colors.backgroundSecondary}
+                  rounded="2xl"
+                  p={5}
                 >
                   <HStack justifyContent="space-between" alignItems="center">
-                    <HStack space={3} alignItems="center">
+                    <HStack space={4} alignItems="center">
                       <Box
-                        p={2}
-                        rounded="lg"
-                        bg={`${category.color}20`}
+                        p={3}
+                        rounded="xl"
+                        bg={isIncome ? colors.incomeLight : colors.expenseLight}
                       >
                         <CategoryIcon
                           iconName={category.icon}
-                          color={category.color}
-                          size={24}
+                          color={isIncome ? colors.income : colors.expense}
+                          size={22}
                         />
                       </Box>
                       <VStack>
-                        <Text color={textColor} fontWeight="medium">
+                        <Text color={colors.textPrimary} fontWeight="500" fontSize="md">
                           {category.name}
                         </Text>
-                        <Text color={subTextColor} fontSize="xs">
+                        <Text color={colors.textTertiary} fontSize="xs" mt={0.5}>
                           {formatDate(expense.date)}
                           {expense.note && ` · ${expense.note}`}
                         </Text>
                       </VStack>
                     </HStack>
                     <Text
-                      fontWeight="semibold"
+                      fontWeight="600"
                       fontSize="lg"
-                      color={isIncome ? '#52C41A' : '#FF6B6B'}
+                      color={isIncome ? colors.income : colors.expense}
                     >
                       {isIncome ? '+' : '-'}{formatCurrency(expense.amount)}
                     </Text>
@@ -266,17 +268,17 @@ export default function Index() {
         )}
       </ScrollView>
 
+      {/* 浮动添加按钮 */}
       <Pressable
         onPress={() => router.push('/add-expense')}
         position="absolute"
-        bottom={6}
-        right={4}
-        bg="#1890FF"
+        bottom={8}
+        right={6}
+        bg={colors.primary}
         p={4}
         rounded="full"
-        shadow={4}
       >
-        <Plus size={28} color="white" />
+        <Plus size={28} color={colors.white} />
       </Pressable>
     </Box>
   );

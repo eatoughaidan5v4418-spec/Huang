@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Text,
-  Heading,
   VStack,
   HStack,
   ScrollView,
-  useColorModeValue,
   Pressable,
 } from 'native-base';
 import { useRouter } from 'expo-router';
@@ -14,6 +12,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useExpenseStore } from '../../store/useExpenseStore';
 import { EXPENSE_CATEGORIES } from '../../constants/categories';
 import CategoryIcon from '../../components/ui/CategoryIcon';
+import { colors } from '../../constants/theme';
 
 export default function Statistics() {
   const router = useRouter();
@@ -48,11 +47,6 @@ export default function Statistics() {
     }
   }, [getMonthlyStats, getCategoryBreakdown, selectedMonth]);
 
-  const bgColor = useColorModeValue('gray.50', 'gray.900');
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const textColor = useColorModeValue('gray.800', 'white');
-  const subTextColor = useColorModeValue('gray.500', 'gray.400');
-
   const goToPrevMonth = () => {
     setSelectedMonth((prev) => {
       if (prev.month === 0) {
@@ -86,39 +80,40 @@ export default function Statistics() {
 
   if (!isReady) {
     return (
-      <Box flex={1} bg={bgColor} justifyContent="center" alignItems="center">
-        <Text color={textColor}>加载中...</Text>
+      <Box flex={1} bg={colors.background} justifyContent="center" alignItems="center">
+        <Text color={colors.textSecondary}>加载中...</Text>
       </Box>
     );
   }
 
   return (
-    <Box flex={1} bg={bgColor} pt={12} px={4}>
-      <HStack alignItems="center" mb={6}>
+    <Box flex={1} bg={colors.background} pt={16} px={6}>
+      {/* 头部 */}
+      <HStack alignItems="center" mb={8}>
         <Pressable onPress={() => router.back()} p={2} mr={2}>
-          <ArrowLeft size={24} color={textColor} />
+          <ArrowLeft size={24} color={colors.textPrimary} />
         </Pressable>
-        <Heading size="lg" color={textColor}>
+        <Text fontSize="2xl" fontWeight="600" color={colors.textPrimary}>
           统计分析
-        </Heading>
+        </Text>
       </HStack>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* 月份选择器 */}
         <Box
-          bg={cardBg}
-          rounded="2xl"
-          p={4}
-          shadow={2}
-          mb={4}
+          bg={colors.backgroundSecondary}
+          rounded="3xl"
+          p={5}
+          mb={6}
           flexDirection="row"
           alignItems="center"
           justifyContent="center"
         >
           <Pressable onPress={goToPrevMonth} p={2}>
-            <ChevronLeft size={24} color={textColor} />
+            <ChevronLeft size={24} color={colors.textPrimary} />
           </Pressable>
           <Box flex={1} alignItems="center">
-            <Text color={textColor} fontSize="lg" fontWeight="semibold">
+            <Text color={colors.textPrimary} fontSize="lg" fontWeight="500">
               {selectedMonth.year}年{selectedMonth.month + 1}月
             </Text>
           </Box>
@@ -128,56 +123,60 @@ export default function Statistics() {
             opacity={isCurrentMonth() ? 0.3 : 1}
             disabled={isCurrentMonth()}
           >
-            <ChevronRight size={24} color={textColor} />
+            <ChevronRight size={24} color={colors.textPrimary} />
           </Pressable>
         </Box>
 
-        <Box bg={cardBg} rounded="2xl" p={6} shadow={2} mb={4}>
-          <HStack justifyContent="space-around" mb={4}>
-            <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
+        {/* 月度统计 */}
+        <Box bg={colors.backgroundSecondary} rounded="3xl" p={8} mb={6}>
+          <HStack justifyContent="space-between" alignItems="flex-start">
+            <VStack alignItems="flex-start" flex={1}>
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
                 总收入
               </Text>
-              <Text color="#52C41A" fontSize="xl" fontWeight="bold">
+              <Text color={colors.income} fontSize="2xl" fontWeight="600">
                 {formatCurrency(monthlyStats.totalIncome)}
               </Text>
             </VStack>
             <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
                 总支出
               </Text>
-              <Text color="#FF6B6B" fontSize="xl" fontWeight="bold">
+              <Text color={colors.expense} fontSize="2xl" fontWeight="600">
                 {formatCurrency(monthlyStats.totalExpense)}
               </Text>
             </VStack>
-            <VStack alignItems="center" flex={1}>
-              <Text color={subTextColor} fontSize="xs" mb={1}>
+            <VStack alignItems="flex-end" flex={1}>
+              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
                 结余
               </Text>
               <Text
-                fontSize="xl"
-                fontWeight="bold"
-                color={monthlyStats.balance >= 0 ? '#52C41A' : '#FF6B6B'}
+                fontSize="2xl"
+                fontWeight="600"
+                color={monthlyStats.balance >= 0 ? colors.income : colors.expense}
               >
                 {formatCurrency(monthlyStats.balance)}
               </Text>
             </VStack>
           </HStack>
-          <Text color={subTextColor} fontSize="xs" textAlign="center">
-            共 {monthlyStats.recordCount} 笔记录
-          </Text>
+          <HStack mt={6} justifyContent="center">
+            <Text color={colors.textSecondary} fontSize="sm">
+              共 {monthlyStats.recordCount} 笔记录
+            </Text>
+          </HStack>
         </Box>
 
-        <Box bg={cardBg} rounded="2xl" p={4} shadow={2} mb={4}>
-          <Text color={textColor} fontSize="md" fontWeight="semibold" mb={4}>
+        {/* 分类明细 */}
+        <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
+          <Text color={colors.textPrimary} fontSize="lg" fontWeight="500" mb={5}>
             分类明细
           </Text>
           {breakdown.filter((item) => item.amount > 0).length === 0 ? (
             <Box alignItems="center" py={8}>
-              <Text color={subTextColor}>该月暂无支出记录</Text>
+              <Text color={colors.textSecondary}>该月暂无支出记录</Text>
             </Box>
           ) : (
-            <VStack space={3}>
+            <VStack space={4}>
               {breakdown
                 .filter((item) => item.amount > 0)
                 .sort((a, b) => b.amount - a.amount)
@@ -188,27 +187,27 @@ export default function Statistics() {
                       key={item.category}
                       justifyContent="space-between"
                       alignItems="center"
-                      p={3}
-                      rounded="lg"
-                      bg={useColorModeValue('gray.50', 'gray.700')}
+                      p={4}
+                      rounded="2xl"
+                      bg={colors.background}
                     >
-                      <HStack space={3} alignItems="center">
-                        <Box p={2} rounded="lg" bg={`${category?.color}20`}>
+                      <HStack space={4} alignItems="center">
+                        <Box p={3} rounded="xl" bg={colors.expenseLight}>
                           <CategoryIcon
                             iconName={category?.icon || 'MoreHorizontal'}
-                            color={category?.color || '#DDA0DD'}
+                            color={colors.expense}
                           />
                         </Box>
                         <VStack>
-                          <Text color={textColor} fontWeight="medium">
+                          <Text color={colors.textPrimary} fontWeight="500">
                             {category?.name || '其他'}
                           </Text>
-                          <Text color={subTextColor} fontSize="xs">
+                          <Text color={colors.textTertiary} fontSize="xs">
                             {item.percentage.toFixed(1)}%
                           </Text>
                         </VStack>
                       </HStack>
-                      <Text color="#FF6B6B" fontWeight="semibold">
+                      <Text color={colors.expense} fontWeight="600" fontSize="lg">
                         {formatCurrency(item.amount)}
                       </Text>
                     </HStack>
