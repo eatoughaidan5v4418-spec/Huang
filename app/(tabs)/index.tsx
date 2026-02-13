@@ -18,9 +18,9 @@ import {
   Bell,
   Settings,
 } from 'lucide-react-native';
-import { useExpenseStore } from '../store/useExpenseStore';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../constants/categories';
-import CategoryIcon from '../components/ui/CategoryIcon';
+import { useExpenseStore } from '../../store/useExpenseStore';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../constants/categories';
+import CategoryIcon from '../../components/ui/CategoryIcon';
 
 export default function Index() {
   const router = useRouter();

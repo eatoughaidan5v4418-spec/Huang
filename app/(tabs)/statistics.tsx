@@ -14,9 +14,9 @@ import { useRouter } from 'expo-router';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { useExpenseStore } from '../store/useExpenseStore';
-import { EXPENSE_CATEGORIES } from '../constants/categories';
-import CategoryIcon from '../components/ui/CategoryIcon';
+import { useExpenseStore } from '../../store/useExpenseStore';
+import { EXPENSE_CATEGORIES } from '../../constants/categories';
+import CategoryIcon from '../../components/ui/CategoryIcon';
 
 const screenWidth = Dimensions.get('window').width;
 
