@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Text,
@@ -7,28 +7,68 @@ import {
   HStack,
   Pressable,
   useColorModeValue,
-  Switch,
   ScrollView,
-  Icon,
+  Switch,
 } from 'native-base';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Bell, Smartphone, CreditCard, AlertCircle, CheckCircle } from 'lucide-react-native';
-import { useNotificationListener } from '../hooks/useNotificationListener';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+const AUTO_RECORD_KEY = 'auto_record_enabled';
+const NOTIFICATION_PERMISSION_KEY = 'notification_permission_enabled';
 
 export default function AutoRecordSettings() {
   const router = useRouter();
-  const {
-    autoRecord,
-    hasPermission,
-    isSupported,
-    requestPermission,
-    toggleAutoRecord,
-  } = useNotificationListener();
+  const [autoRecord, setAutoRecord] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  const isSupported = Platform.OS === 'android';
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const autoRecordValue = await AsyncStorage.getItem(AUTO_RECORD_KEY);
+      const permissionValue = await AsyncStorage.getItem(NOTIFICATION_PERMISSION_KEY);
+      setAutoRecord(autoRecordValue === 'true');
+      setHasPermission(permissionValue === 'true');
+      setIsReady(true);
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+      setIsReady(true);
+    }
+  };
+
+  const toggleAutoRecord = async (enabled: boolean) => {
+    setAutoRecord(enabled);
+    await AsyncStorage.setItem(AUTO_RECORD_KEY, enabled.toString());
+  };
+
+  const requestPermission = async () => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATION_PERMISSION_KEY, 'true');
+      setHasPermission(true);
+    } catch (error) {
+      console.error('Failed to save permission:', error);
+    }
+  };
 
   const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const textColor = useColorModeValue('gray.800', 'white');
   const subTextColor = useColorModeValue('gray.500', 'gray.400');
+
+  if (!isReady) {
+    return (
+      <Box flex={1} bg={bgColor} justifyContent="center" alignItems="center">
+        <Text color={textColor}>加载中...</Text>
+      </Box>
+    );
+  }
 
   if (!isSupported) {
     return (
