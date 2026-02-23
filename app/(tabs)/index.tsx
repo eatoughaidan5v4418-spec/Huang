@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Text,
@@ -7,279 +7,295 @@ import {
   Pressable,
   ScrollView,
 } from 'native-base';
-import { useRouter } from 'expo-router';
 import {
-  Plus,
-  TrendingUp,
-  Bell,
+  Bluetooth,
+  BluetoothOff,
+  Thermometer,
+  Droplets,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  User,
 } from 'lucide-react-native';
-import { useExpenseStore } from '../../store/useExpenseStore';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../constants/categories';
-import CategoryIcon from '../../components/ui/CategoryIcon';
+import { useCushionStore } from '../../store/useCushionStore';
+import { POSTURE_INFO } from '../../constants/posture';
 import { colors } from '../../constants/theme';
+import { generateMockSensorData } from '../../services/bluetoothService';
 
-export default function Index() {
-  const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
+export default function Dashboard() {
+  const device = useCushionStore((s) => s.device);
+  const sensorData = useCushionStore((s) => s.sensorData);
+  const currentPosture = useCushionStore((s) => s.currentPosture);
+  const isSeated = useCushionStore((s) => s.isSeated);
+  const sittingStartTime = useCushionStore((s) => s.sittingStartTime);
+  const control = useCushionStore((s) => s.control);
+  const thresholds = useCushionStore((s) => s.thresholds);
+  const todayAlertCount = useCushionStore((s) => s.todayAlertCount);
+  const updateSensorData = useCushionStore((s) => s.updateSensorData);
+  const addTempHumidityPoint = useCushionStore((s) => s.addTempHumidityPoint);
 
-  const expenses = useExpenseStore((state) => state.expenses);
-  const getMonthlyExpense = useExpenseStore((state) => state.getMonthlyExpense);
-  const getMonthlyIncome = useExpenseStore((state) => state.getMonthlyIncome);
-  const getRecentExpenses = useExpenseStore((state) => state.getRecentExpenses);
+  const [sittingTime, setSittingTime] = useState(0);
+  const [demoMode, setDemoMode] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tempRecordRef = useRef<number>(0);
 
-  const [currentDate] = useState(new Date());
-  const currentMonth = currentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
-
-  const [monthlyExpense, setMonthlyExpense] = useState(0);
-  const [monthlyIncome, setMonthlyIncome] = useState(0);
-  const [recentExpenses, setRecentExpenses] = useState<any[]>([]);
-
+  // 久坐计时
   useEffect(() => {
-    try {
-      const expense = getMonthlyExpense(currentYear, currentMonth);
-      const income = getMonthlyIncome(currentYear, currentMonth);
-      const recent = getRecentExpenses(5);
-      setMonthlyExpense(expense);
-      setMonthlyIncome(income);
-      setRecentExpenses(recent);
-      setIsReady(true);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setIsReady(true);
+    if (isSeated && sittingStartTime) {
+      timerRef.current = setInterval(() => {
+        setSittingTime(Math.floor((Date.now() - sittingStartTime) / 1000));
+      }, 1000);
+    } else {
+      setSittingTime(0);
     }
-  }, [expenses, getMonthlyExpense, getMonthlyIncome, getRecentExpenses, currentYear, currentMonth]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isSeated, sittingStartTime]);
 
-  const getCategoryInfo = (categoryId: string, type: string) => {
-    const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-    return categories.find((c) => c.id === categoryId) || categories[categories.length - 1];
+  // 模拟数据(开发模式)
+  useEffect(() => {
+    if (demoMode) {
+      mockRef.current = setInterval(() => {
+        const data = generateMockSensorData();
+        updateSensorData(data);
+        tempRecordRef.current += 1;
+        if (tempRecordRef.current % 20 === 0) {
+          const now = new Date();
+          addTempHumidityPoint({
+            time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+            temperature: data.temperature,
+            humidity: data.humidity,
+          });
+        }
+      }, 500);
+    }
+    return () => {
+      if (mockRef.current) clearInterval(mockRef.current);
+    };
+  }, [demoMode]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const formatCurrency = (amount: number) => {
-    return `¥${amount.toFixed(2)}`;
-  };
+  const postureInfo = POSTURE_INFO[currentPosture.posture];
+  const postureColor =
+    postureInfo.level === 'good' ? colors.healthy
+    : postureInfo.level === 'warn' ? colors.warning
+    : postureInfo.level === 'bad' ? colors.danger
+    : colors.textTertiary;
+  const postureBg =
+    postureInfo.level === 'good' ? colors.healthyLight
+    : postureInfo.level === 'warn' ? colors.warningLight
+    : postureInfo.level === 'bad' ? colors.dangerLight
+    : colors.backgroundTertiary;
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const expenseDate = new Date(date);
-
-    if (expenseDate.toDateString() === now.toDateString()) {
-      return '今天';
-    }
-
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (expenseDate.toDateString() === yesterday.toDateString()) {
-      return '昨天';
-    }
-
-    return `${expenseDate.getMonth() + 1}月${expenseDate.getDate()}日`;
-  };
-
-  if (!isReady) {
-    return (
-      <Box flex={1} bg={colors.background} justifyContent="center" alignItems="center">
-        <Text color={colors.textSecondary}>加载中...</Text>
-      </Box>
-    );
-  }
+  const sittingMinutes = Math.floor(sittingTime / 60);
+  const isSittingTooLong = sittingMinutes >= thresholds.sittingDurationMax;
 
   return (
-    <Box flex={1} bg={colors.background} pt={16} px={6}>
-      {/* 头部标题 */}
-      <HStack justifyContent="space-between" alignItems="center" mb={8}>
-        <Text fontSize="3xl" fontWeight="600" color={colors.textPrimary}>
-          EasyBill
-        </Text>
-        <HStack space={3}>
-          <Pressable
-            onPress={() => router.push('/auto-record')}
-            p={3}
-            rounded="full"
-            bg={colors.backgroundSecondary}
-          >
-            <Bell size={22} color={colors.primary} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/statistics')}
-            p={3}
-            rounded="full"
-            bg={colors.backgroundSecondary}
-          >
-            <TrendingUp size={22} color={colors.primary} />
-          </Pressable>
-        </HStack>
+    <Box flex={1} bg={colors.background} pt={16} px={5}>
+      {/* 头部 */}
+      <HStack justifyContent="space-between" alignItems="center" mb={6}>
+        <VStack>
+          <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
+            智能健康坐垫
+          </Text>
+          <HStack alignItems="center" space={1} mt={1}>
+            {demoMode || device.isConnected ? (
+              <Bluetooth size={14} color={colors.primary} />
+            ) : (
+              <BluetoothOff size={14} color={colors.textTertiary} />
+            )}
+            <Text fontSize="xs" color={demoMode || device.isConnected ? colors.primary : colors.textTertiary}>
+              {demoMode ? '演示模式' : device.isConnected ? `已连接: ${device.deviceName}` : '未连接设备'}
+            </Text>
+          </HStack>
+        </VStack>
+        <Pressable
+          onPress={() => setDemoMode(!demoMode)}
+          bg={demoMode ? colors.primaryLight : colors.backgroundTertiary}
+          px={4} py={2} rounded="full"
+        >
+          <Text fontSize="xs" color={demoMode ? colors.primary : colors.textSecondary}>
+            {demoMode ? '演示中' : '连接设备'}
+          </Text>
+        </Pressable>
       </HStack>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 月度总览卡片 */}
-        <Box
-          bg={colors.backgroundSecondary}
-          rounded="3xl"
-          p={8}
-          mb={8}
-        >
-          <HStack justifyContent="space-between" alignItems="flex-start">
-            <VStack alignItems="flex-start" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                本月收入
+        {/* 坐姿状态大卡片 */}
+        <Box bg={postureBg} rounded="3xl" p={6} mb={5} borderWidth={1} borderColor={postureColor + '30'}>
+          <HStack alignItems="center" space={4}>
+            <Box
+              w={16} h={16} rounded="full" bg={postureColor + '20'}
+              alignItems="center" justifyContent="center"
+            >
+              {postureInfo.level === 'none' ? (
+                <User size={32} color={postureColor} />
+              ) : postureInfo.level === 'good' ? (
+                <CheckCircle size={32} color={postureColor} />
+              ) : (
+                <AlertTriangle size={32} color={postureColor} />
+              )}
+            </Box>
+            <VStack flex={1}>
+              <Text fontSize="xl" fontWeight="700" color={postureColor}>
+                {postureInfo.label}
               </Text>
-              <Text color={colors.income} fontSize="2xl" fontWeight="600">
-                {formatCurrency(monthlyIncome)}
-              </Text>
-            </VStack>
-            <VStack alignItems="center" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                本月支出
-              </Text>
-              <Text color={colors.expense} fontSize="2xl" fontWeight="600">
-                {formatCurrency(monthlyExpense)}
-              </Text>
-            </VStack>
-            <VStack alignItems="flex-end" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                结余
-              </Text>
-              <Text
-                fontSize="2xl"
-                fontWeight="600"
-                color={monthlyIncome - monthlyExpense >= 0 ? colors.income : colors.expense}
-              >
-                {formatCurrency(monthlyIncome - monthlyExpense)}
+              <Text fontSize="sm" color={colors.textSecondary} mt={1}>
+                {postureInfo.description}
               </Text>
             </VStack>
-          </HStack>
-
-          {/* 记账笔数 */}
-          <HStack mt={6} justifyContent="center">
-            <Text color={colors.textSecondary} fontSize="sm">
-              本月共记账 {expenses.filter((e) => {
-                const d = new Date(e.date);
-                return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-              }).length} 笔
-            </Text>
           </HStack>
         </Box>
 
-        {/* 自动记账提示 */}
-        <Pressable onPress={() => router.push('/auto-record')} mb={8}>
-          <Box
-            bg={colors.primaryLight}
-            rounded="3xl"
-            p={5}
-          >
-            <HStack alignItems="center" space={4}>
-              <Box
-                p={3}
-                rounded="full"
-                bg={colors.white}
-              >
-                <Bell size={20} color={colors.primary} />
-              </Box>
-              <VStack flex={1}>
-                <Text color={colors.textPrimary} fontWeight="500" fontSize="md">
-                  开启自动记账
-                </Text>
-                <Text color={colors.textSecondary} fontSize="sm" mt={0.5}>
-                  自动抓取微信/支付宝交易
-                </Text>
-              </VStack>
-            </HStack>
-          </Box>
-        </Pressable>
-
-        {/* 最近记录标题 */}
-        <HStack justifyContent="space-between" alignItems="center" mb={5}>
-          <Text color={colors.textPrimary} fontSize="lg" fontWeight="500">
-            最近记录
+        {/* 压力分布可视化 */}
+        <Box bg={colors.backgroundSecondary} rounded="3xl" p={5} mb={5}>
+          <Text fontSize="md" fontWeight="600" color={colors.textPrimary} mb={4}>
+            压力分布
           </Text>
-          {recentExpenses.length > 0 && (
-            <Pressable onPress={() => router.push('/statistics')}>
-              <Text color={colors.primary} fontSize="sm">
-                查看全部
-              </Text>
-            </Pressable>
-          )}
+          <HStack justifyContent="center" space={2}>
+            <VStack space={2} alignItems="center">
+              <HStack space={2}>
+                <PressureCell label="左前" value={sensorData.pressureLeftFront} />
+                <PressureCell label="右前" value={sensorData.pressureRightFront} />
+              </HStack>
+              <HStack space={2}>
+                <PressureCell label="左后" value={sensorData.pressureLeftBack} />
+                <PressureCell label="右后" value={sensorData.pressureRightBack} />
+              </HStack>
+            </VStack>
+            <VStack ml={4} flex={1} space={3} justifyContent="center">
+              <RatioBar label="左/右" left={currentPosture.leftRatio} right={currentPosture.rightRatio} />
+              <RatioBar label="前/后" left={currentPosture.frontRatio} right={currentPosture.backRatio} />
+            </VStack>
+          </HStack>
+        </Box>
+
+        {/* 温度 + 湿度 + 就座时长 */}
+        <HStack space={3} mb={5}>
+          <Box flex={1} bg={colors.backgroundSecondary} rounded="2xl" p={4}>
+            <HStack alignItems="center" space={2} mb={2}>
+              <Thermometer size={16} color={colors.heating} />
+              <Text fontSize="xs" color={colors.textTertiary}>温度</Text>
+            </HStack>
+            <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
+              {sensorData.temperature.toFixed(1)}
+            </Text>
+            <Text fontSize="xs" color={colors.textTertiary}>°C</Text>
+            {control.heatingOn && (
+              <Box mt={1} bg={colors.heatingLight} rounded="full" px={2} py={0.5} alignSelf="flex-start">
+                <Text fontSize="2xs" color={colors.heating}>加热中</Text>
+              </Box>
+            )}
+          </Box>
+          <Box flex={1} bg={colors.backgroundSecondary} rounded="2xl" p={4}>
+            <HStack alignItems="center" space={2} mb={2}>
+              <Droplets size={16} color={colors.cooling} />
+              <Text fontSize="xs" color={colors.textTertiary}>湿度</Text>
+            </HStack>
+            <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
+              {sensorData.humidity.toFixed(1)}
+            </Text>
+            <Text fontSize="xs" color={colors.textTertiary}>%RH</Text>
+            {control.fanOn && (
+              <Box mt={1} bg={colors.coolingLight} rounded="full" px={2} py={0.5} alignSelf="flex-start">
+                <Text fontSize="2xs" color={colors.cooling}>散热中</Text>
+              </Box>
+            )}
+          </Box>
+          <Box
+            flex={1}
+            bg={isSittingTooLong ? colors.dangerLight : colors.backgroundSecondary}
+            rounded="2xl" p={4}
+          >
+            <HStack alignItems="center" space={2} mb={2}>
+              <Clock size={16} color={isSittingTooLong ? colors.danger : colors.primary} />
+              <Text fontSize="xs" color={colors.textTertiary}>就座</Text>
+            </HStack>
+            <Text
+              fontSize="2xl" fontWeight="700"
+              color={isSittingTooLong ? colors.danger : colors.textPrimary}
+            >
+              {formatTime(sittingTime)}
+            </Text>
+            <Text fontSize="xs" color={colors.textTertiary}>
+              {isSeated ? '就座中' : '已离座'}
+            </Text>
+          </Box>
         </HStack>
 
-        {/* 记录列表 */}
-        {recentExpenses.length === 0 ? (
-          <Box
-            bg={colors.backgroundSecondary}
-            rounded="3xl"
-            p={10}
-            alignItems="center"
-            mb={8}
-          >
-            <Text color={colors.textSecondary} textAlign="center">
-              还没有记账记录
-            </Text>
-            <Text color={colors.textTertiary} textAlign="center" fontSize="sm" mt={2}>
-              点击下方按钮开始记账吧
-            </Text>
-          </Box>
-        ) : (
-          <VStack space={4} mb={24}>
-            {recentExpenses.map((expense) => {
-              const category = getCategoryInfo(expense.category, expense.type || 'expense');
-              const isIncome = expense.type === 'income';
-              return (
-                <Box
-                  key={expense.id}
-                  bg={colors.backgroundSecondary}
-                  rounded="2xl"
-                  p={5}
-                >
-                  <HStack justifyContent="space-between" alignItems="center">
-                    <HStack space={4} alignItems="center">
-                      <Box
-                        p={3}
-                        rounded="xl"
-                        bg={isIncome ? colors.incomeLight : colors.expenseLight}
-                      >
-                        <CategoryIcon
-                          iconName={category.icon}
-                          color={isIncome ? colors.income : colors.expense}
-                          size={22}
-                        />
-                      </Box>
-                      <VStack>
-                        <Text color={colors.textPrimary} fontWeight="500" fontSize="md">
-                          {category.name}
-                        </Text>
-                        <Text color={colors.textTertiary} fontSize="xs" mt={0.5}>
-                          {formatDate(expense.date)}
-                          {expense.note && ` · ${expense.note}`}
-                        </Text>
-                      </VStack>
-                    </HStack>
-                    <Text
-                      fontWeight="600"
-                      fontSize="lg"
-                      color={isIncome ? colors.income : colors.expense}
-                    >
-                      {isIncome ? '+' : '-'}{formatCurrency(expense.amount)}
-                    </Text>
-                  </HStack>
-                </Box>
-              );
-            })}
-          </VStack>
-        )}
-      </ScrollView>
+        {/* 今日统计 */}
+        <Box bg={colors.backgroundSecondary} rounded="2xl" p={5} mb={5}>
+          <Text fontSize="md" fontWeight="600" color={colors.textPrimary} mb={3}>
+            今日概览
+          </Text>
+          <HStack justifyContent="space-around">
+            <VStack alignItems="center">
+              <Text fontSize="2xl" fontWeight="700" color={colors.primary}>
+                {todayAlertCount}
+              </Text>
+              <Text fontSize="xs" color={colors.textTertiary}>坐姿提醒</Text>
+            </VStack>
+            <VStack alignItems="center">
+              <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary}>
+                {sittingMinutes}
+              </Text>
+              <Text fontSize="xs" color={colors.textTertiary}>就座(分)</Text>
+            </VStack>
+            <VStack alignItems="center">
+              <Text fontSize="2xl" fontWeight="700" color={colors.healthy}>
+                {sensorData.temperature > 0 ? sensorData.temperature.toFixed(1) + '°' : '--'}
+              </Text>
+              <Text fontSize="xs" color={colors.textTertiary}>当前温度</Text>
+            </VStack>
+          </HStack>
+        </Box>
 
-      {/* 浮动添加按钮 */}
-      <Pressable
-        onPress={() => router.push('/add-expense')}
-        position="absolute"
-        bottom={8}
-        right={6}
-        bg={colors.primary}
-        p={4}
-        rounded="full"
-      >
-        <Plus size={28} color={colors.white} />
-      </Pressable>
+        <Box h={24} />
+      </ScrollView>
     </Box>
+  );
+}
+
+function PressureCell({ label, value }: { label: string; value: number }) {
+  const maxPressure = 500;
+  const ratio = Math.min(value / maxPressure, 1);
+  const bgColor = value <= 0 ? colors.backgroundTertiary
+    : ratio > 0.6 ? '#EF444430' : ratio > 0.3 ? '#F59E0B30' : '#22C55E30';
+
+  return (
+    <Box
+      w={16} h={16} rounded="xl" alignItems="center" justifyContent="center"
+      bg={bgColor}
+    >
+      <Text fontSize="xs" color={colors.textSecondary}>{label}</Text>
+      <Text fontSize="sm" fontWeight="700" color={colors.textPrimary}>
+        {Math.round(value)}
+      </Text>
+    </Box>
+  );
+}
+
+function RatioBar({ label, left, right }: { label: string; left: number; right: number }) {
+  const leftPct = Math.round(left * 100);
+  const rightPct = Math.round(right * 100);
+  return (
+    <VStack>
+      <HStack justifyContent="space-between" mb={1}>
+        <Text fontSize="2xs" color={colors.textTertiary}>{leftPct}%</Text>
+        <Text fontSize="2xs" color={colors.textSecondary} fontWeight="500">{label}</Text>
+        <Text fontSize="2xs" color={colors.textTertiary}>{rightPct}%</Text>
+      </HStack>
+      <HStack h={2} rounded="full" overflow="hidden" bg={colors.backgroundTertiary}>
+        <Box flex={leftPct || 1} bg={leftPct > 65 ? colors.warning : colors.primary} roundedLeft="full" />
+        <Box flex={rightPct || 1} bg={rightPct > 65 ? colors.warning : colors.primary + '60'} roundedRight="full" />
+      </HStack>
+    </VStack>
   );
 }

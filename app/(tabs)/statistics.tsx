@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Text,
@@ -7,217 +7,249 @@ import {
   ScrollView,
   Pressable,
 } from 'native-base';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { useExpenseStore } from '../../store/useExpenseStore';
-import { EXPENSE_CATEGORIES } from '../../constants/categories';
-import CategoryIcon from '../../components/ui/CategoryIcon';
+import {
+  Activity,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Thermometer,
+  Droplets,
+  TrendingUp,
+} from 'lucide-react-native';
+import { Dimensions } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
+import { useCushionStore } from '../../store/useCushionStore';
+import { POSTURE_INFO } from '../../constants/posture';
 import { colors } from '../../constants/theme';
 
+const screenWidth = Dimensions.get('window').width - 40;
+
 export default function Statistics() {
-  const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
+  const history = useCushionStore((s) => s.history);
+  const tempHumidityHistory = useCushionStore((s) => s.tempHumidityHistory);
+  const todayAlertCount = useCushionStore((s) => s.todayAlertCount);
 
-  const getMonthlyStats = useExpenseStore((state) => state.getMonthlyStats);
-  const getCategoryBreakdown = useExpenseStore((state) => state.getCategoryBreakdown);
+  const [activeTab, setActiveTab] = useState<'posture' | 'environment'>('posture');
 
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
+  // 构建温湿度图表数据
+  const chartData = tempHumidityHistory.length > 0 ? {
+    labels: tempHumidityHistory.slice(-8).map((p) => p.time),
+    datasets: [
+      {
+        data: tempHumidityHistory.slice(-8).map((p) => p.temperature),
+        color: () => colors.heating,
+        strokeWidth: 2,
+      },
+      {
+        data: tempHumidityHistory.slice(-8).map((p) => p.humidity),
+        color: () => colors.cooling,
+        strokeWidth: 2,
+      },
+    ],
+    legend: ['温度(°C)', '湿度(%)'],
+  } : null;
 
-  const [monthlyStats, setMonthlyStats] = useState({
-    totalExpense: 0,
-    totalIncome: 0,
-    balance: 0,
-    recordCount: 0,
-  });
-  const [breakdown, setBreakdown] = useState<any[]>([]);
+  // 最近7条历史记录
+  const recentHistory = history.slice(0, 7);
 
-  useEffect(() => {
-    try {
-      const stats = getMonthlyStats(selectedMonth.year, selectedMonth.month);
-      const catBreakdown = getCategoryBreakdown(selectedMonth.year, selectedMonth.month);
-      setMonthlyStats(stats);
-      setBreakdown(catBreakdown);
-      setIsReady(true);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-      setIsReady(true);
-    }
-  }, [getMonthlyStats, getCategoryBreakdown, selectedMonth]);
-
-  const goToPrevMonth = () => {
-    setSelectedMonth((prev) => {
-      if (prev.month === 0) {
-        return { year: prev.year - 1, month: 11 };
-      }
-      return { ...prev, month: prev.month - 1 };
-    });
-  };
-
-  const goToNextMonth = () => {
-    const now = new Date();
-    if (selectedMonth.year === now.getFullYear() && selectedMonth.month === now.getMonth()) {
-      return;
-    }
-    setSelectedMonth((prev) => {
-      if (prev.month === 11) {
-        return { year: prev.year + 1, month: 0 };
-      }
-      return { ...prev, month: prev.month + 1 };
-    });
-  };
-
-  const formatCurrency = (amount: number) => {
-    return `¥${amount.toFixed(2)}`;
-  };
-
-  const isCurrentMonth = () => {
-    const now = new Date();
-    return selectedMonth.year === now.getFullYear() && selectedMonth.month === now.getMonth();
-  };
-
-  if (!isReady) {
-    return (
-      <Box flex={1} bg={colors.background} justifyContent="center" alignItems="center">
-        <Text color={colors.textSecondary}>加载中...</Text>
-      </Box>
-    );
-  }
+  // 统计总就座时长
+  const totalSittingMinutes = recentHistory.reduce((sum, r) => sum + Math.floor(r.duration / 60), 0);
+  const totalAlerts = recentHistory.reduce((sum, r) => sum + r.alertCount, 0);
 
   return (
-    <Box flex={1} bg={colors.background} pt={16} px={6}>
-      {/* 头部 */}
-      <HStack alignItems="center" mb={8}>
-        <Pressable onPress={() => router.back()} p={2} mr={2}>
-          <ArrowLeft size={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text fontSize="2xl" fontWeight="600" color={colors.textPrimary}>
-          统计分析
-        </Text>
-      </HStack>
+    <Box flex={1} bg={colors.background} pt={16} px={5}>
+      <Text fontSize="2xl" fontWeight="700" color={colors.textPrimary} mb={6}>
+        数据统计
+      </Text>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 月份选择器 */}
-        <Box
-          bg={colors.backgroundSecondary}
-          rounded="3xl"
-          p={5}
-          mb={6}
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <Pressable onPress={goToPrevMonth} p={2}>
-            <ChevronLeft size={24} color={colors.textPrimary} />
-          </Pressable>
-          <Box flex={1} alignItems="center">
-            <Text color={colors.textPrimary} fontSize="lg" fontWeight="500">
-              {selectedMonth.year}年{selectedMonth.month + 1}月
-            </Text>
-          </Box>
-          <Pressable
-            onPress={goToNextMonth}
-            p={2}
-            opacity={isCurrentMonth() ? 0.3 : 1}
-            disabled={isCurrentMonth()}
-          >
-            <ChevronRight size={24} color={colors.textPrimary} />
-          </Pressable>
-        </Box>
-
-        {/* 月度统计 */}
-        <Box bg={colors.backgroundSecondary} rounded="3xl" p={8} mb={6}>
-          <HStack justifyContent="space-between" alignItems="flex-start">
-            <VStack alignItems="flex-start" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                总收入
-              </Text>
-              <Text color={colors.income} fontSize="2xl" fontWeight="600">
-                {formatCurrency(monthlyStats.totalIncome)}
-              </Text>
-            </VStack>
-            <VStack alignItems="center" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                总支出
-              </Text>
-              <Text color={colors.expense} fontSize="2xl" fontWeight="600">
-                {formatCurrency(monthlyStats.totalExpense)}
-              </Text>
-            </VStack>
-            <VStack alignItems="flex-end" flex={1}>
-              <Text color={colors.textTertiary} fontSize="sm" mb={1}>
-                结余
-              </Text>
+        {/* Tab 切换 */}
+        <Box bg={colors.backgroundSecondary} rounded="2xl" p={1} mb={5}>
+          <HStack>
+            <Pressable
+              flex={1}
+              onPress={() => setActiveTab('posture')}
+              bg={activeTab === 'posture' ? colors.primary : 'transparent'}
+              rounded="xl" py={3} alignItems="center"
+            >
               <Text
-                fontSize="2xl"
-                fontWeight="600"
-                color={monthlyStats.balance >= 0 ? colors.income : colors.expense}
+                fontSize="sm" fontWeight="500"
+                color={activeTab === 'posture' ? colors.white : colors.textSecondary}
               >
-                {formatCurrency(monthlyStats.balance)}
+                坐姿分析
               </Text>
-            </VStack>
-          </HStack>
-          <HStack mt={6} justifyContent="center">
-            <Text color={colors.textSecondary} fontSize="sm">
-              共 {monthlyStats.recordCount} 笔记录
-            </Text>
+            </Pressable>
+            <Pressable
+              flex={1}
+              onPress={() => setActiveTab('environment')}
+              bg={activeTab === 'environment' ? colors.primary : 'transparent'}
+              rounded="xl" py={3} alignItems="center"
+            >
+              <Text
+                fontSize="sm" fontWeight="500"
+                color={activeTab === 'environment' ? colors.white : colors.textSecondary}
+              >
+                环境趋势
+              </Text>
+            </Pressable>
           </HStack>
         </Box>
 
-        {/* 分类明细 */}
-        <Box bg={colors.backgroundSecondary} rounded="3xl" p={6} mb={6}>
-          <Text color={colors.textPrimary} fontSize="lg" fontWeight="500" mb={5}>
-            分类明细
-          </Text>
-          {breakdown.filter((item) => item.amount > 0).length === 0 ? (
-            <Box alignItems="center" py={8}>
-              <Text color={colors.textSecondary}>该月暂无支出记录</Text>
+        {activeTab === 'posture' ? (
+          <>
+            {/* 坐姿统计概览 */}
+            <HStack space={3} mb={5}>
+              <Box flex={1} bg={colors.backgroundSecondary} rounded="2xl" p={4} alignItems="center">
+                <Activity size={20} color={colors.primary} />
+                <Text fontSize="xl" fontWeight="700" color={colors.textPrimary} mt={2}>
+                  {totalSittingMinutes}
+                </Text>
+                <Text fontSize="xs" color={colors.textTertiary}>总就座(分)</Text>
+              </Box>
+              <Box flex={1} bg={colors.backgroundSecondary} rounded="2xl" p={4} alignItems="center">
+                <AlertTriangle size={20} color={colors.warning} />
+                <Text fontSize="xl" fontWeight="700" color={colors.warning} mt={2}>
+                  {totalAlerts + todayAlertCount}
+                </Text>
+                <Text fontSize="xs" color={colors.textTertiary}>坐姿提醒</Text>
+              </Box>
+              <Box flex={1} bg={colors.backgroundSecondary} rounded="2xl" p={4} alignItems="center">
+                <CheckCircle size={20} color={colors.healthy} />
+                <Text fontSize="xl" fontWeight="700" color={colors.healthy} mt={2}>
+                  {recentHistory.length}
+                </Text>
+                <Text fontSize="xs" color={colors.textTertiary}>记录次数</Text>
+              </Box>
+            </HStack>
+
+            {/* 历史记录列表 */}
+            <Box bg={colors.backgroundSecondary} rounded="3xl" p={5} mb={5}>
+              <Text fontSize="md" fontWeight="600" color={colors.textPrimary} mb={4}>
+                近期就座记录
+              </Text>
+              {recentHistory.length === 0 ? (
+                <Box alignItems="center" py={8}>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    暂无就座记录
+                  </Text>
+                  <Text color={colors.textTertiary} fontSize="xs" mt={1}>
+                    坐上坐垫后会自动记录
+                  </Text>
+                </Box>
+              ) : (
+                <VStack space={3}>
+                  {recentHistory.map((record) => {
+                    const durationMin = Math.floor(record.duration / 60);
+                    const normalPct = Math.round(record.postureBreakdown.normal * 100);
+                    return (
+                      <Box key={record.id} bg={colors.background} rounded="2xl" p={4}>
+                        <HStack justifyContent="space-between" alignItems="center" mb={2}>
+                          <Text fontSize="sm" fontWeight="500" color={colors.textPrimary}>
+                            {record.date}
+                          </Text>
+                          <HStack alignItems="center" space={1}>
+                            <Clock size={12} color={colors.textTertiary} />
+                            <Text fontSize="xs" color={colors.textTertiary}>{durationMin}分钟</Text>
+                          </HStack>
+                        </HStack>
+                        <HStack justifyContent="space-between" alignItems="center">
+                          <HStack space={2}>
+                            <Box bg={colors.healthyLight} rounded="full" px={2} py={0.5}>
+                              <Text fontSize="2xs" color={colors.healthy}>端正 {normalPct}%</Text>
+                            </Box>
+                            {record.alertCount > 0 && (
+                              <Box bg={colors.warningLight} rounded="full" px={2} py={0.5}>
+                                <Text fontSize="2xs" color={colors.warning}>提醒 {record.alertCount}次</Text>
+                              </Box>
+                            )}
+                          </HStack>
+                          <Text fontSize="xs" color={colors.textTertiary}>
+                            {record.avgTemperature.toFixed(1)}° / {record.avgHumidity.toFixed(0)}%
+                          </Text>
+                        </HStack>
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              )}
             </Box>
-          ) : (
-            <VStack space={4}>
-              {breakdown
-                .filter((item) => item.amount > 0)
-                .sort((a, b) => b.amount - a.amount)
-                .map((item) => {
-                  const category = EXPENSE_CATEGORIES.find((c) => c.id === item.category);
-                  return (
-                    <HStack
-                      key={item.category}
-                      justifyContent="space-between"
-                      alignItems="center"
-                      p={4}
-                      rounded="2xl"
-                      bg={colors.background}
-                    >
-                      <HStack space={4} alignItems="center">
-                        <Box p={3} rounded="xl" bg={colors.expenseLight}>
-                          <CategoryIcon
-                            iconName={category?.icon || 'MoreHorizontal'}
-                            color={colors.expense}
-                          />
-                        </Box>
-                        <VStack>
-                          <Text color={colors.textPrimary} fontWeight="500">
-                            {category?.name || '其他'}
-                          </Text>
-                          <Text color={colors.textTertiary} fontSize="xs">
-                            {item.percentage.toFixed(1)}%
-                          </Text>
-                        </VStack>
-                      </HStack>
-                      <Text color={colors.expense} fontWeight="600" fontSize="lg">
-                        {formatCurrency(item.amount)}
-                      </Text>
-                    </HStack>
-                  );
-                })}
-            </VStack>
-          )}
-        </Box>
+          </>
+        ) : (
+          <>
+            {/* 温湿度趋势图 */}
+            <Box bg={colors.backgroundSecondary} rounded="3xl" p={5} mb={5}>
+              <HStack alignItems="center" space={2} mb={4}>
+                <TrendingUp size={18} color={colors.primary} />
+                <Text fontSize="md" fontWeight="600" color={colors.textPrimary}>
+                  温湿度趋势
+                </Text>
+              </HStack>
+              {chartData ? (
+                <LineChart
+                  data={chartData}
+                  width={screenWidth - 20}
+                  height={200}
+                  chartConfig={{
+                    backgroundColor: colors.backgroundSecondary,
+                    backgroundGradientFrom: colors.backgroundSecondary,
+                    backgroundGradientTo: colors.backgroundSecondary,
+                    decimalPlaces: 1,
+                    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
+                    labelColor: () => colors.textTertiary,
+                    propsForDots: { r: '3' },
+                    propsForBackgroundLines: { stroke: colors.backgroundTertiary },
+                  }}
+                  bezier
+                  style={{ borderRadius: 16 }}
+                />
+              ) : (
+                <Box alignItems="center" py={8}>
+                  <Text color={colors.textSecondary} fontSize="sm">
+                    数据收集中...
+                  </Text>
+                  <Text color={colors.textTertiary} fontSize="xs" mt={1}>
+                    连接设备后将自动记录温湿度变化
+                  </Text>
+                </Box>
+              )}
+            </Box>
 
-        <Box h={8} />
+            {/* 温湿度阈值说明 */}
+            <Box bg={colors.backgroundSecondary} rounded="3xl" p={5} mb={5}>
+              <Text fontSize="md" fontWeight="600" color={colors.textPrimary} mb={3}>
+                环境阈值
+              </Text>
+              <HStack space={3}>
+                <Box flex={1} bg={colors.heatingLight} rounded="2xl" p={4}>
+                  <HStack alignItems="center" space={2} mb={2}>
+                    <Thermometer size={16} color={colors.heating} />
+                    <Text fontSize="sm" fontWeight="500" color={colors.heating}>温度</Text>
+                  </HStack>
+                  <Text fontSize="xs" color={colors.textSecondary}>
+                    低于 {useCushionStore.getState().thresholds.tempMin}°C 加热
+                  </Text>
+                  <Text fontSize="xs" color={colors.textSecondary}>
+                    达到 {useCushionStore.getState().thresholds.tempMax}°C 停止
+                  </Text>
+                </Box>
+                <Box flex={1} bg={colors.coolingLight} rounded="2xl" p={4}>
+                  <HStack alignItems="center" space={2} mb={2}>
+                    <Droplets size={16} color={colors.cooling} />
+                    <Text fontSize="sm" fontWeight="500" color={colors.cooling}>湿度</Text>
+                  </HStack>
+                  <Text fontSize="xs" color={colors.textSecondary}>
+                    高于 {useCushionStore.getState().thresholds.humidityMax}% 散热
+                  </Text>
+                  <Text fontSize="xs" color={colors.textSecondary}>
+                    降至 {useCushionStore.getState().thresholds.humidityMin}% 停止
+                  </Text>
+                </Box>
+              </HStack>
+            </Box>
+          </>
+        )}
+
+        <Box h={24} />
       </ScrollView>
     </Box>
   );

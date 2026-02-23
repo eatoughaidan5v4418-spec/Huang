@@ -1,43 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Expense } from '../types';
+import { ThresholdSettings, HistoryRecord } from '../types';
 
-const EXPENSES_KEY = '@expenses';
+const THRESHOLDS_KEY = '@cushion_thresholds';
+const HISTORY_KEY = '@cushion_history';
 
-export const saveExpenses = async (expenses: Expense[]): Promise<void> => {
+export const saveThresholds = async (thresholds: ThresholdSettings): Promise<void> => {
   try {
-    const jsonValue = JSON.stringify(expenses);
-    await AsyncStorage.setItem(EXPENSES_KEY, jsonValue);
+    await AsyncStorage.setItem(THRESHOLDS_KEY, JSON.stringify(thresholds));
   } catch (error) {
-    console.error('Error saving expenses:', error);
-    throw error;
+    console.error('保存阈值设置失败:', error);
   }
 };
 
-export const loadExpenses = async (): Promise<Expense[]> => {
+export const loadThresholds = async (): Promise<ThresholdSettings | null> => {
   try {
-    const jsonValue = await AsyncStorage.getItem(EXPENSES_KEY);
-    if (jsonValue == null) {
-      return [];
-    }
-    const expenses = JSON.parse(jsonValue);
-    return expenses.map((expense: Expense) => ({
-      ...expense,
-      date: new Date(expense.date),
-    }));
+    const json = await AsyncStorage.getItem(THRESHOLDS_KEY);
+    return json ? JSON.parse(json) : null;
   } catch (error) {
-    console.error('Error loading expenses:', error);
+    console.error('加载阈值设置失败:', error);
+    return null;
+  }
+};
+
+export const saveHistory = async (history: HistoryRecord[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    console.error('保存历史记录失败:', error);
+  }
+};
+
+export const loadHistory = async (): Promise<HistoryRecord[]> => {
+  try {
+    const json = await AsyncStorage.getItem(HISTORY_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch (error) {
+    console.error('加载历史记录失败:', error);
     return [];
   }
-};
-
-export const addExpenseToStorage = async (expense: Expense): Promise<void> => {
-  const expenses = await loadExpenses();
-  const updatedExpenses = [expense, ...expenses];
-  await saveExpenses(updatedExpenses);
-};
-
-export const deleteExpenseFromStorage = async (id: string): Promise<void> => {
-  const expenses = await loadExpenses();
-  const updatedExpenses = expenses.filter((expense) => expense.id !== id);
-  await saveExpenses(updatedExpenses);
 };
