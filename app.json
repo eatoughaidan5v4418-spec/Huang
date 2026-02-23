@@ -40,9 +40,7 @@
       "expo-router"
     ],
     "extra": {
-      "eas": {
-        "projectId": "fe637980-b639-4d72-b8c8-5790dd4d27d3"
-      }
+      "eas": {}
     }
   }
 }
