@@ -13,6 +13,14 @@ echo 当前文件夹: %SRC%
 echo 目标文件夹: %DEST%
 echo.
 
+REM ── 验证这是项目文件夹（检查 package.json 是否存在）──
+if not exist "%SRC%\package.json" (
+    echo [错误] 没有找到 package.json！
+    echo 请把此脚本放到项目根目录后再运行。
+    pause
+    exit /b 1
+)
+
 REM 检查是否已经在目标位置
 if /I "%SRC%"=="%DEST%" (
     echo [提示] 文件已经在目标位置，无需移动！
@@ -20,15 +28,44 @@ if /I "%SRC%"=="%DEST%" (
     exit /b 0
 )
 
-REM 创建目标文件夹（含父级）
+REM 创建目标文件夹
 if not exist "%USERPROFILE%\Desktop\第十八届合泰杯" mkdir "%USERPROFILE%\Desktop\第十八届合泰杯"
 if not exist "%DEST%" mkdir "%DEST%"
 
-echo 正在复制文件（跳过 node_modules 和 .git）...
+echo 正在复制项目文件...
 echo.
 
-REM 使用 robocopy 复制（Windows 内置，比 xcopy 更可靠）
-robocopy "%SRC%" "%DEST%" /E /XD node_modules .git /XF "*.log" /NP /NFL /NDL
+REM ── 只复制项目相关文件夹 ──
+for %%D in (app assets components constants dist2 expo public services src store types utils web) do (
+    if exist "%SRC%\%%D" (
+        echo   复制文件夹: %%D
+        robocopy "%SRC%\%%D" "%DEST%\%%D" /E /NP /NFL /NDL >nul
+    )
+)
+
+REM ── 只复制项目相关文件 ──
+echo   复制配置文件...
+for %%F in (
+    App.tsx
+    app.json
+    babel.config.js
+    build.bat
+    eas.json
+    eslint.config.js
+    index.html
+    metro.config.js
+    package.json
+    package-lock.json
+    README.md
+    setup.bat
+    tsconfig.json
+    vite.config.js
+    .easignore
+    .gitignore
+    移动到桌面文件夹.bat
+) do (
+    if exist "%SRC%\%%F" copy "%SRC%\%%F" "%DEST%\%%F" /Y >nul
+)
 
 echo.
 echo ============================================
