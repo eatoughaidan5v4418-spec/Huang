@@ -8,8 +8,6 @@ export default function RootLayout() {
     <NativeBaseProvider theme={theme}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="add-expense" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="auto-record" options={{ presentation: 'modal' }} />
       </Stack>
     </NativeBaseProvider>
   );
