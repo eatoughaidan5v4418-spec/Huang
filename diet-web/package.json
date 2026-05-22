@@ -9,6 +9,9 @@
     "deploy": "npx vercel --prod",
     "lint": "next lint"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",
     "lucide-react": "^0.468.0",
