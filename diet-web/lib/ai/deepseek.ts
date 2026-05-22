@@ -1,4 +1,4 @@
-import { optionalEnv, requiredEnv } from "@/lib/env";
+import { optionalEnv } from "@/lib/env";
 import type { MealScore, MealType } from "@/lib/types";
 import { z } from "zod";
 
@@ -16,12 +16,22 @@ type DeepSeekMessage = {
   content: string;
 };
 
+export function hasDeepSeekConfig() {
+  return Boolean(optionalEnv("DEEPSEEK_API_KEY"));
+}
+
 async function callDeepSeek(messages: DeepSeekMessage[], json = false) {
+  const apiKey = optionalEnv("DEEPSEEK_API_KEY");
+
+  if (!apiKey) {
+    throw new Error("DeepSeek API Key is not configured.");
+  }
+
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${requiredEnv("DEEPSEEK_API_KEY")}`
+      Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
       model: optionalEnv("DEEPSEEK_MODEL") || "deepseek-v4-flash",
@@ -65,7 +75,7 @@ export async function scoreMeal(input: {
         role: "user",
         content: JSON.stringify({
           instruction:
-            "请根据餐别、日期、用户描述和图片识别结果给这顿饭打 0-100 分，并给出简洁中文建议。必须返回字段：score, summary, strengths, concerns, nutritionAdvice, nextMealSuggestion。",
+            "请根据餐别、日期、用户描述和图片记录给这顿饭打 0-100 分，并给出简洁中文建议。必须返回字段：score, summary, strengths, concerns, nutritionAdvice, nextMealSuggestion。",
           mealType: input.mealType,
           date: input.date,
           userDescription: input.userDescription || "用户没有补充说明",
@@ -93,7 +103,7 @@ export async function chatWithDietContext(input: {
     {
       role: "system",
       content:
-        "你是中文饮食助手。基于用户已保存的饮食记录回答，给实用建议。不要编造不存在的记录，必要时说明信息不足。"
+        "你是中文饮食助手。基于用户提供的饮食记录回答，给实用建议。不要编造不存在的记录，必要时说明信息不足。"
     },
     {
       role: "user",

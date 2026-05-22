@@ -95,7 +95,30 @@ export default function Home() {
     }
 
     const imageUrl = image instanceof File && image.size > 0 ? await fileToDataUrl(image) : null;
-    const score = makeScore(description || "上传了餐食图片", mealType);
+    let score = makeScore(description || "上传了餐食图片", mealType);
+    let usedAi = false;
+
+    try {
+      const response = await fetch("/api/meals/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mealType,
+          date,
+          description,
+          visionText: imageUrl ? "用户上传了餐食图片，但当前未接入视觉识别，请主要依据文字描述评分。" : ""
+        })
+      });
+      const data = await response.json();
+
+      if (response.ok && data.scoreResult) {
+        score = data.scoreResult;
+        usedAi = true;
+      }
+    } catch {
+      usedAi = false;
+    }
+
     const entry: MealEntry = {
       id: crypto.randomUUID(),
       user_id: "guest",
@@ -103,14 +126,14 @@ export default function Home() {
       meal_type: mealType,
       image_url: imageUrl,
       user_description: description || null,
-      vision_text: imageUrl ? "已保存餐食图片。未配置视觉模型时不会自动识别图片内容。" : null,
+      vision_text: usedAi ? "DeepSeek AI 已参与评分。" : imageUrl ? "已保存餐食图片，当前使用本地评分兜底。" : null,
       score_result: score,
       created_at: new Date().toISOString()
     };
 
     setEntries((current) => [entry, ...current.filter((item) => !(item.meal_date === date && item.meal_type === mealType))]);
     form.reset();
-    setStatus({ type: "ok", message: `${mealLabels[mealType]}已保存并生成评分。` });
+    setStatus({ type: "ok", message: `${mealLabels[mealType]}已保存并${usedAi ? "由 DeepSeek AI 生成评分" : "生成本地评分"}。` });
   }
 
   function askDietAssistant(event: FormEvent<HTMLFormElement>) {
@@ -119,12 +142,21 @@ export default function Home() {
       dayEntries.length > 0
         ? Math.round(dayEntries.reduce((sum, entry) => sum + (entry.score_result?.score || 0), 0) / dayEntries.length)
         : 0;
-    const answer =
+    const fallback =
       dayEntries.length === 0
         ? "今天还没有餐食记录。先上传早餐、午餐或晚餐，我就能根据记录给你建议。"
         : `今天已记录 ${dayEntries.length} 餐，平均分约 ${average}。建议下一餐优先补充蔬菜和优质蛋白，少喝含糖饮料。你的问题是：${chatQuestion}`;
 
-    setChatAnswer(answer);
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: chatQuestion, context: dayEntries })
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        setChatAnswer(response.ok && data.answer ? data.answer : fallback);
+      })
+      .catch(() => setChatAnswer(fallback));
   }
 
   return (

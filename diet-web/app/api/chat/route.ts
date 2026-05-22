@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { chatWithDietContext } from "@/lib/ai/deepseek";
-import { createServiceSupabase, getUserFromRequest } from "@/lib/supabase/server";
+import { chatWithDietContext, hasDeepSeekConfig } from "@/lib/ai/deepseek";
 
 export async function POST(request: Request) {
   try {
-    const { user, error } = await getUserFromRequest(request);
-
-    if (!user) {
-      return NextResponse.json({ error }, { status: 401 });
+    if (!hasDeepSeekConfig()) {
+      return NextResponse.json({ error: "DeepSeek API Key is not configured." }, { status: 503 });
     }
 
     const body = await request.json();
@@ -17,22 +14,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "请输入问题。" }, { status: 400 });
     }
 
-    const supabase = createServiceSupabase();
-    const { data, error: queryError } = await supabase
-      .from("meal_entries")
-      .select("meal_date, meal_type, user_description, vision_text, score_result")
-      .eq("user_id", user.id)
-      .order("meal_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(21);
-
-    if (queryError) {
-      throw new Error(queryError.message);
-    }
-
     const answer = await chatWithDietContext({
       question,
-      context: data
+      context: body.context || []
     });
 
     return NextResponse.json({ answer });
