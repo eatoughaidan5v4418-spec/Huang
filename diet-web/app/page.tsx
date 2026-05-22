@@ -1,21 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import {
-  CalendarDays,
-  ChevronRight,
-  History,
-  Loader2,
-  LogOut,
-  MessageCircle,
-  Send,
-  UploadCloud,
-  Utensils
-} from "lucide-react";
-import { createBrowserSupabase, hasBrowserSupabaseConfig } from "@/lib/supabase/client";
-import type { MealEntry, MealType } from "@/lib/types";
+import { CalendarDays, History, MessageCircle, Send, UploadCloud, Utensils } from "lucide-react";
+import type { MealEntry, MealScore, MealType } from "@/lib/types";
 import { mealLabels } from "@/lib/types";
 
 type Status = {
@@ -24,239 +11,120 @@ type Status = {
 };
 
 const mealTypes: MealType[] = ["breakfast", "lunch", "dinner"];
+const storageKey = "diet-score-guest-entries";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function makeScore(description: string, mealType: MealType): MealScore {
+  const text = description.toLowerCase();
+  let score = 78;
+
+  if (/蔬菜|青菜|水果|蛋白|鸡蛋|鱼|牛肉|鸡胸|豆腐|杂粮/.test(text)) {
+    score += 10;
+  }
+
+  if (/奶茶|炸|油炸|甜品|可乐|烧烤|夜宵|蛋糕|薯条/.test(text)) {
+    score -= 14;
+  }
+
+  if (/少油|少糖|清淡|水煮|蒸|煮/.test(text)) {
+    score += 6;
+  }
+
+  score = Math.max(45, Math.min(96, score));
+
+  const mealName = mealLabels[mealType];
+
+  return {
+    score,
+    summary: `${mealName}记录完成。当前评分基于你填写的文字和图片记录生成，适合先做日常饮食自查。`,
+    strengths: ["已完成餐食记录", "能持续记录就可以形成饮食习惯反馈"],
+    concerns: score < 70 ? ["这餐可能油糖偏高或营养结构不够均衡"] : ["继续注意主食、蛋白质和蔬菜的比例"],
+    nutritionAdvice: ["建议每餐包含优质蛋白、蔬菜和适量主食", "饮料优先选择水、无糖茶或低糖饮品"],
+    nextMealSuggestion:
+      score < 70 ? "下一餐尽量清淡一些，增加蔬菜和蛋白质，减少油炸和含糖饮料。" : "下一餐保持均衡，可以继续补充蔬菜和优质蛋白。"
+  };
+}
+
+async function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("图片读取失败。"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Home() {
-  const supabase = useMemo(() => createBrowserSupabase(), []);
-  const hasSupabaseConfig = hasBrowserSupabaseConfig();
-  const [session, setSession] = useState<Session | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [date, setDate] = useState(today());
   const [entries, setEntries] = useState<MealEntry[]>([]);
-  const [history, setHistory] = useState<MealEntry[]>([]);
   const [status, setStatus] = useState<Status>({ type: "idle", message: "" });
-  const [authLoading, setAuthLoading] = useState(true);
-  const [loadingMeal, setLoadingMeal] = useState<MealType | null>(null);
   const [chatQuestion, setChatQuestion] = useState("");
   const [chatAnswer, setChatAnswer] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
-    if (!hasSupabaseConfig) {
-      setAuthLoading(false);
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setAuthLoading(false);
-    });
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-    });
-
-    return () => data.subscription.unsubscribe();
-  }, [hasSupabaseConfig, supabase]);
+    const raw = window.localStorage.getItem(storageKey);
+    setEntries(raw ? JSON.parse(raw) : []);
+  }, []);
 
   useEffect(() => {
-    if (session) {
-      loadMeals(date);
-      loadHistory();
-    }
-  }, [session, date]);
+    window.localStorage.setItem(storageKey, JSON.stringify(entries));
+  }, [entries]);
 
-  async function authHeaders() {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-
-    if (!token) {
-      throw new Error("请先登录。");
-    }
-
-    return { Authorization: `Bearer ${token}` };
-  }
-
-  async function signIn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus({ type: "idle", message: "" });
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      const signup = await supabase.auth.signUp({ email, password });
-
-      if (signup.error) {
-        setStatus({ type: "error", message: signup.error.message });
-        return;
-      }
-
-      setSession(signup.data.session);
-      setStatus({ type: "ok", message: "账号已创建。如果 Supabase 开启邮箱验证，请先完成验证。" });
-      return;
-    }
-
-    setSession(data.session);
-  }
-
-  async function loadMeals(targetDate: string) {
-    try {
-      const response = await fetch(`/api/meals?date=${targetDate}`, {
-        headers: await authHeaders()
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "读取失败。");
-      }
-
-      setEntries(data.entries);
-    } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : "读取失败。" });
-    }
-  }
-
-  async function loadHistory() {
-    try {
-      const response = await fetch("/api/meals/history", {
-        headers: await authHeaders()
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "读取历史失败。");
-      }
-
-      setHistory(data.entries);
-    } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : "读取历史失败。" });
-    }
-  }
-
-  async function submitMeal(event: FormEvent<HTMLFormElement>, mealType: MealType) {
-    event.preventDefault();
-    setLoadingMeal(mealType);
-    setStatus({ type: "idle", message: "" });
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    formData.set("mealType", mealType);
-    formData.set("date", date);
-
-    try {
-      const response = await fetch("/api/meals/analyze", {
-        method: "POST",
-        headers: await authHeaders(),
-        body: formData
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "分析失败。");
-      }
-
-      form.reset();
-      setStatus({ type: "ok", message: `${mealLabels[mealType]}已生成评分。` });
-      await loadMeals(date);
-      await loadHistory();
-    } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : "分析失败。" });
-    } finally {
-      setLoadingMeal(null);
-    }
-  }
-
-  async function askDietAssistant(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setChatLoading(true);
-    setChatAnswer("");
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(await authHeaders())
-        },
-        body: JSON.stringify({ question: chatQuestion })
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "对话失败。");
-      }
-
-      setChatAnswer(data.answer);
-    } catch (error) {
-      setChatAnswer(error instanceof Error ? error.message : "对话失败。");
-    } finally {
-      setChatLoading(false);
-    }
-  }
-
+  const dayEntries = useMemo(() => entries.filter((entry) => entry.meal_date === date), [entries, date]);
   const latestByMeal = mealTypes.reduce<Record<MealType, MealEntry | undefined>>(
     (acc, mealType) => {
-      acc[mealType] = entries.find((entry) => entry.meal_type === mealType);
+      acc[mealType] = dayEntries.find((entry) => entry.meal_type === mealType);
       return acc;
     },
     { breakfast: undefined, lunch: undefined, dinner: undefined }
   );
 
-  if (authLoading) {
-    return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <Loader2 className="h-8 w-8 animate-spin text-leaf" />
-      </main>
-    );
+  async function submitMeal(event: FormEvent<HTMLFormElement>, mealType: MealType) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const description = String(formData.get("description") || "").trim();
+    const image = formData.get("image");
+
+    if (!description && !(image instanceof File && image.size > 0)) {
+      setStatus({ type: "error", message: "请上传图片或填写餐食说明。" });
+      return;
+    }
+
+    const imageUrl = image instanceof File && image.size > 0 ? await fileToDataUrl(image) : null;
+    const score = makeScore(description || "上传了餐食图片", mealType);
+    const entry: MealEntry = {
+      id: crypto.randomUUID(),
+      user_id: "guest",
+      meal_date: date,
+      meal_type: mealType,
+      image_url: imageUrl,
+      user_description: description || null,
+      vision_text: imageUrl ? "已保存餐食图片。未配置视觉模型时不会自动识别图片内容。" : null,
+      score_result: score,
+      created_at: new Date().toISOString()
+    };
+
+    setEntries((current) => [entry, ...current.filter((item) => !(item.meal_date === date && item.meal_type === mealType))]);
+    form.reset();
+    setStatus({ type: "ok", message: `${mealLabels[mealType]}已保存并生成评分。` });
   }
 
-  if (!hasSupabaseConfig) {
-    return <SetupRequired />;
-  }
+  function askDietAssistant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const average =
+      dayEntries.length > 0
+        ? Math.round(dayEntries.reduce((sum, entry) => sum + (entry.score_result?.score || 0), 0) / dayEntries.length)
+        : 0;
+    const answer =
+      dayEntries.length === 0
+        ? "今天还没有餐食记录。先上传早餐、午餐或晚餐，我就能根据记录给你建议。"
+        : `今天已记录 ${dayEntries.length} 餐，平均分约 ${average}。建议下一餐优先补充蔬菜和优质蛋白，少喝含糖饮料。你的问题是：${chatQuestion}`;
 
-  if (!session) {
-    return (
-      <main className="grid min-h-screen place-items-center px-6 py-10">
-        <section className="w-full max-w-md rounded-lg bg-white p-8 shadow-soft">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-leaf text-white">
-              <Utensils className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold">饮食评分</h1>
-              <p className="text-sm text-ink/60">登录后记录三餐并保存 AI 建议</p>
-            </div>
-          </div>
-          <form className="space-y-4" onSubmit={signIn}>
-            <input
-              className="w-full rounded-md border border-ink/15 px-4 py-3 outline-none focus:border-leaf"
-              type="email"
-              placeholder="邮箱"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-            <input
-              className="w-full rounded-md border border-ink/15 px-4 py-3 outline-none focus:border-leaf"
-              type="password"
-              placeholder="密码"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={6}
-              required
-            />
-            <button className="w-full rounded-md bg-leaf px-4 py-3 font-semibold text-white" type="submit">
-              登录 / 注册
-            </button>
-          </form>
-          {status.message ? <p className="mt-4 text-sm text-tomato">{status.message}</p> : null}
-        </section>
-      </main>
-    );
+    setChatAnswer(answer);
   }
 
   return (
@@ -269,27 +137,13 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold md:text-3xl">每日饮食评分</h1>
-              <p className="text-sm text-ink/60">{session.user.email}</p>
+              <p className="text-sm text-ink/60">免配置体验版：记录保存在当前浏览器</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm">
-              <CalendarDays className="h-4 w-4 text-leaf" />
-              <input className="bg-transparent outline-none" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-            </label>
-            <Link className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" href="/history">
-              <History className="h-4 w-4" />
-              历史
-            </Link>
-            <button
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm"
-              onClick={() => supabase.auth.signOut()}
-              type="button"
-            >
-              <LogOut className="h-4 w-4" />
-              退出
-            </button>
-          </div>
+          <label className="flex w-fit items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm">
+            <CalendarDays className="h-4 w-4 text-leaf" />
+            <input className="bg-transparent outline-none" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </label>
         </header>
 
         {status.message ? (
@@ -304,13 +158,7 @@ export default function Home() {
 
         <section className="grid gap-5 lg:grid-cols-3">
           {mealTypes.map((mealType) => (
-            <MealCard
-              key={mealType}
-              entry={latestByMeal[mealType]}
-              loading={loadingMeal === mealType}
-              mealType={mealType}
-              onSubmit={submitMeal}
-            />
+            <MealCard key={mealType} entry={latestByMeal[mealType]} mealType={mealType} onSubmit={submitMeal} />
           ))}
         </section>
 
@@ -328,8 +176,8 @@ export default function Home() {
                 onChange={(event) => setChatQuestion(event.target.value)}
                 required
               />
-              <button className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 font-semibold text-white" disabled={chatLoading}>
-                {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              <button className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 font-semibold text-white">
+                <Send className="h-4 w-4" />
                 发送
               </button>
             </form>
@@ -337,19 +185,13 @@ export default function Home() {
           </div>
 
           <div className="rounded-lg bg-white/90 p-5 shadow-soft">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <History className="h-5 w-5 text-leaf" />
-                <h2 className="text-xl font-semibold">最近记录</h2>
-              </div>
-              <Link className="inline-flex items-center gap-1 text-sm font-semibold text-leaf" href="/history">
-                全部
-                <ChevronRight className="h-4 w-4" />
-              </Link>
+            <div className="mb-4 flex items-center gap-2">
+              <History className="h-5 w-5 text-leaf" />
+              <h2 className="text-xl font-semibold">最近记录</h2>
             </div>
             <div className="max-h-[32rem] space-y-3 overflow-auto pr-1">
-              {history.length ? (
-                history.slice(0, 8).map((entry) => <HistoryRow entry={entry} key={entry.id} />)
+              {entries.length ? (
+                entries.slice(0, 10).map((entry) => <HistoryRow entry={entry} key={entry.id} />)
               ) : (
                 <p className="rounded-md bg-oat p-4 text-sm text-ink/60">还没有饮食记录。</p>
               )}
@@ -361,34 +203,13 @@ export default function Home() {
   );
 }
 
-function SetupRequired() {
-  return (
-    <main className="grid min-h-screen place-items-center px-6 py-10">
-      <section className="w-full max-w-xl rounded-lg bg-white p-8 shadow-soft">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-lg bg-leaf text-white">
-            <Utensils className="h-6 w-6" />
-          </div>
-          <h1 className="text-2xl font-semibold">需要配置 Supabase</h1>
-        </div>
-        <p className="leading-7 text-ink/70">
-          请在本地或 Vercel 环境变量中填写 <code>NEXT_PUBLIC_SUPABASE_URL</code> 和{" "}
-          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>，同时按 <code>supabase/schema.sql</code> 初始化数据库。
-        </p>
-      </section>
-    </main>
-  );
-}
-
 function MealCard({
   mealType,
   entry,
-  loading,
   onSubmit
 }: {
   mealType: MealType;
   entry?: MealEntry;
-  loading: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>, mealType: MealType) => void;
 }) {
   const [preview, setPreview] = useState("");
@@ -402,13 +223,7 @@ function MealCard({
         ) : null}
       </div>
 
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          onSubmit(event, mealType);
-          setPreview("");
-        }}
-      >
+      <form className="space-y-3" onSubmit={(event) => onSubmit(event, mealType)}>
         <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed border-leaf/40 bg-mint/45 px-4 py-5 text-center text-sm text-ink/70">
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -435,8 +250,7 @@ function MealCard({
           name="description"
           placeholder="补充说明：例如半碗米饭、少油、加了奶茶..."
         />
-        <button className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-leaf px-4 py-3 font-semibold text-white" disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        <button className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-leaf px-4 py-3 font-semibold text-white">
           生成评分
         </button>
       </form>
@@ -490,7 +304,7 @@ function InfoList({ title, items }: { title: string; items: string[] }) {
 
 function HistoryRow({ entry }: { entry: MealEntry }) {
   return (
-    <Link className="block rounded-md border border-ink/10 bg-white p-3 text-left transition hover:border-leaf/40" href="/history">
+    <div className="rounded-md border border-ink/10 bg-white p-3">
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold">
           {entry.meal_date} · {mealLabels[entry.meal_type]}
@@ -500,6 +314,6 @@ function HistoryRow({ entry }: { entry: MealEntry }) {
       <p className="mt-2 line-clamp-2 text-sm leading-6 text-ink/65">
         {entry.score_result?.summary || entry.user_description || entry.vision_text || "无摘要"}
       </p>
-    </Link>
+    </div>
   );
 }
